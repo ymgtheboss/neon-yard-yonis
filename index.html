@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEON YARD — Mill District</title>
+<title>NEON YARD — Subzero</title>
 
 <style>
 :root {
@@ -184,13 +184,13 @@ tr.me { color:var(--cyan); background:#62e5db0b }
   <div class="shell">
     <div class="topline">
       <span>LOCAL NETWORK / MULTIPLAYER</span>
-      <span>04 — MILL DISTRICT</span>
+      <span>05 — SUBZERO</span>
     </div>
     <div class="hero">
       <h1>NEON<br><span>YARD.</span></h1>
       <p>Fast rounds. Loud loadouts.<br>
-      Fight through the mill, flank the courtyards,
-      or take the rooftops. Every elimination counts.</p>
+      Fight through Subzero’s snowy streets,
+      flank through alleys, and hold the courtyard. Every elimination counts.</p>
     </div>
     <div class="layout">
       <section class="panel">
@@ -352,9 +352,10 @@ tr.me { color:var(--cyan); background:#62e5db0b }
  setTimeout(function(){if(!ready&&!failed)report('The game did not finish loading. Check that node server.cjs is still running, then refresh.');},20000);
 })();
 </script>
+<script type="importmap">{"imports":{"three":"/three.module.js"}}</script>
 <script type="module">
 import * as THREE from "/three.module.js";
-import { WEAPONS, SKINS, BLOCKS, DECOR, PROPS, AREAS } from "/world.js";
+import { WEAPONS, SKINS, BLOCKS, DECOR, PROPS, AREAS, MAP } from "/world.js";
 
 const $ = id => document.getElementById(id);
 const show = (id, on = true) => $(id).classList.toggle("hidden", !on);
@@ -558,7 +559,7 @@ function sign(text,x,y,z,rotation=0,color='#f2dfb0',w=5){
  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,w*144/768),new THREE.MeshBasicMaterial({map:t}));m.position.set(x,y,z);m.rotation.y=rotation;scene.add(m);
 }
 // Low hedges near perimeter courts stay out of the circulation paths.
-for(const [x,z] of [[-39,-30],[-39,30],[-11,36],[-12,-36]])for(let n=0;n<3;n++)visualBox(x+n*.45,0,z,.65,.65+(n%2)*.2,.75,'grass','#718146');
+for(const [x,z] of (MAP?[]:[[-39,-30],[-39,30],[-11,36],[-12,-36]]))for(let n=0;n<3;n++)visualBox(x+n*.45,0,z,.65,.65+(n%2)*.2,.75,'grass','#718146');
 const leafGeo=new THREE.IcosahedronGeometry(1,0),leafInstances=[];
 for(const p of PROPS) {
  if(p.kind==='sign')sign(p.text,p.x,p.y,p.z,p.ry||0,'#eedcaa',p.w);
@@ -593,6 +594,28 @@ for(const group of geometryGroups.values()) {
  const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:group.color,map:surfaceTextures[group.mat],roughness:.98,metalness:0,flatShading:true}));m.castShadow=true;m.receiveShadow=true;scene.add(m);
 }
 
+
+let mapReady=!MAP, mapCollision=null;
+if(MAP){
+ scene.background=new THREE.Color('#b8ccd9');scene.fog=new THREE.Fog('#b8ccd9',90,170);
+ const credit=document.createElement('a');credit.textContent=MAP.attribution;credit.href=MAP.source;
+ credit.target='_blank';credit.rel='noopener noreferrer';credit.style.cssText='display:block;font-size:11px;margin-top:12px;color:#b9c9d8';
+ $('joinMessage').parentNode.appendChild(credit);
+ $('joinMessage').textContent='Loading Subzero map…';
+ Promise.all([import('/addons/loaders/GLTFLoader.js'),import('/map-collision.js')]).then(async ([{GLTFLoader},{MapCollision}])=>{
+   const [gltf,collisionResponse]=await Promise.all([
+     new GLTFLoader().loadAsync(MAP.url,progress=>{if(progress.total)$('joinMessage').textContent='Loading Subzero map… '+Math.round(progress.loaded/progress.total*100)+'%';}),
+     fetch(MAP.collisionUrl)
+   ]);
+   if(!collisionResponse.ok)throw Error('Map collision download failed');
+   const collisionData=await collisionResponse.arrayBuffer();
+   mapCollision=new MapCollision(new Float32Array(collisionData));
+   gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;o.matrixAutoUpdate=false;o.updateMatrix();o.geometry.computeBoundingSphere();
+     for(const m of (Array.isArray(o.material)?o.material:[o.material])){if(m.map)m.map.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());}
+   }});
+   scene.add(gltf.scene);mapReady=true;$('joinMessage').textContent='Subzero ready';
+ }).catch(error=>{$('joinMessage').textContent='Could not load Subzero. Reload to retry.';console.error('Subzero map loading failed',error);});
+}
 
 window.NeonBoot?.stage('Preparing controls and player models');
 // Character meshes.
@@ -753,6 +776,7 @@ function feed(text) {
 }
 
 function connect() {
+  if(!mapReady){$("joinMessage").textContent="Wait for the map to finish loading, or reload if loading failed.";return;}
   if(loadout.length!==2) {
     $("joinMessage").textContent="Choose two different guns first.";
     return;
@@ -1955,7 +1979,7 @@ function visualRay(o,d,b){
   else {let a=(lo-o[axis])/d[axis],c=(hi-o[axis])/d[axis];if(a>c)[a,c]=[c,a];near=Math.max(near,a);far=Math.min(far,c);if(near>far)return Infinity;}
  }return near;
 }
-function clearSight(from,to){const d=new THREE.Vector3().subVectors(to,from),len=d.length();d.normalize();return !BLOCKS.some(b=>visualRay(from,d,b)<len-.25);}
+function clearSight(from,to){const d=new THREE.Vector3().subVectors(to,from),len=d.length();d.normalize();if(MAP)return !!mapCollision&&mapCollision.distance(from,d,len)>=len-.25;return !BLOCKS.some(b=>visualRay(from,d,b)<len-.25);}
 function crossesSmoke(from,to){
  const delta=new THREE.Vector3().subVectors(to,from),len=delta.length();delta.normalize();
  return state?.smokes.some(s=>{

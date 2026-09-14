@@ -1,3 +1,7 @@
+# NEON YARD — Subzero
+
+Subzero is now the default map. See [SUBZERO.md](SUBZERO.md) for startup, optimization, collision, attribution, and validation details. The Mill District instructions below describe the retained legacy arena (`WORLD_MAP=mill npm start`).
+
 # NEON YARD — Mill District
 
 Your complete upgraded game, based on the project you uploaded.

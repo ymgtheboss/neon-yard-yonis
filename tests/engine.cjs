@@ -1,4 +1,5 @@
 'use strict';
+process.env.WORLD_MAP='mill';
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const {createRequire}=require('node:module');

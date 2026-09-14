@@ -15,6 +15,12 @@ const send=(c,m)=>c.ws.send(JSON.stringify(m));
  for(const route of ['/','/world.js','/three.module.js','/three.core.js','/district.css']){const r=await fetch(url+route);assert.equal(r.status,200);assert.ok((await r.text()).length>20)}
  console.log('PASS all five locally served asset routes');
  assert.equal((await fetch(url+'/server.cjs')).status,404);console.log('PASS server source is not publicly served');
+ for(const route of ['/addons/loaders/GLTFLoader.js','/addons/utils/BufferGeometryUtils.js','/addons/utils/SkeletonUtils.js','/map-collision.js'])assert.equal((await fetch(url+route)).status,200);
+ for(const route of ['/maps/subzero.glb','/maps/subzero-collision.bin']){
+  const r=await fetch(url+route);assert.equal(r.status,200);assert.equal(r.headers.get('content-encoding'),'gzip');const bytes=(await r.arrayBuffer()).byteLength;assert.ok(bytes>1000);assert.equal(Number(r.headers.get('x-file-size')),bytes);
+  assert.equal((await fetch(url+route,{headers:{'If-None-Match':r.headers.get('etag')}})).status,304);
+ }
+ console.log('PASS Subzero loader dependencies, compressed map downloads and cache validation');
  const a=await join('Test A'),b=await join('Test B');await until(()=>b.states.at(-1)?.players.length===2,'two player state');assert.equal(b.states.at(-1).host,a.id);
  send(b,{type:'start'});await delay(100);assert.equal(b.states.at(-1).phase,'lobby');console.log('PASS only the host can start rounds');
  send(a,{type:'ping',stamp:123});await until(()=>a.events.some(m=>m.type==='pong'&&m.stamp===123),'ping');console.log('PASS round-trip ping');
@@ -26,5 +32,5 @@ const send=(c,m)=>c.ws.send(JSON.stringify(m));
  // Fourteen more connections exercise snapshots near room capacity.
  for(let i=0;i<14;i++)await join('Load '+i);
  await until(()=>b.states.at(-1)?.players.length===15,'15 players');console.log('PASS state broadcast with 15 concurrent clients');
- console.log('\n9 network checks passed.');
+ console.log('\n10 network checks passed.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{for(const ws of sockets)ws.terminate();server.kill();});

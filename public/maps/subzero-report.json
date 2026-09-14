@@ -1,0 +1,23 @@
+{
+  "name": "Subzero",
+  "scale": 0.1,
+  "offset": [
+    -70,
+    -53,
+    230
+  ],
+  "inputTriangles": 86713,
+  "renderTriangles": 86611,
+  "collisionTriangles": 29809,
+  "chunks": 240,
+  "sourceBytes": 9040944,
+  "optimizedBytes": 4768516,
+  "attribution": {
+    "author": "Ale Nation (https://sketchfab.com/alenation)",
+    "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+    "source": "https://sketchfab.com/3d-models/subzero-krunker-map-64e50b50f57b43709a1ca4914cbe091e",
+    "title": "Subzero || Krunker Map"
+  },
+  "subzero.glbGzipBytes": 1029564,
+  "subzero-collision.binGzipBytes": 180952
+}

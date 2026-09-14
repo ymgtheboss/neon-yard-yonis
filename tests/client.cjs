@@ -1,4 +1,5 @@
 'use strict';
+process.env.WORLD_MAP='mill';
 // Real Three.js math and geometry with a minimal DOM and renderer double.
 // This checks client execution, not visual rendering or actual browser audio.
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
@@ -24,7 +25,7 @@ els.get('reloadTrack').append(new Element());
 const document={body:new Element('body'),head:new Element('head'),createElement:t=>new Element(t),getElementById:id=>els.get(id),addEventListener(){},exitPointerLock(){},pointerLockElement:null};
 class Renderer{constructor(){this.domElement=new Element('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>4};this.info={render:{calls:0}}}setSize(){}setPixelRatio(v){this.pixelRatio=v}render(scene,camera){scene.updateMatrixWorld();camera.updateMatrixWorld()}clearDepth(){}}
 let time=1000;const local=new Map();const intervals=[];
-const context={THREE:{...THREE,WebGLRenderer:Renderer},...world,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
+const context={URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
 context.window.document=document;
 vm.createContext(context);
 const server=fs.readFileSync(path.join(__dirname,'..','server.cjs'),'utf8');

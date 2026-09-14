@@ -53,7 +53,10 @@ const SKINS = {
   ice: "#e3efff"
 };
 
-const { BLOCKS, DECOR, PROPS, AREAS, SPAWNS } = require('./world-data.cjs');
+const { BLOCKS, DECOR, PROPS, AREAS, SPAWNS, MAP } = require('./world-data.cjs');
+
+const {MapCollision}=require('./map-collision.cjs');
+const mapCollision=MAP?(()=>{const b=fs.readFileSync(path.join(__dirname,'public/maps/subzero-collision.bin'));return new MapCollision(new Float32Array(b.buffer,b.byteOffset,b.byteLength/4));})():null;
 
 let phase = "lobby";
 let roundEnd = 0;
@@ -113,6 +116,7 @@ function overlaps(x, z, radius, b) {
 }
 
 function blocked(x,y,z,radius=.36) {
+  if(mapCollision)return mapCollision.blocked(x,y,z,radius);
   return BLOCKS.some(b =>
     y+1.72>b.y+.015 &&
     y<b.y+b.h-.015 &&
@@ -162,6 +166,7 @@ function rayBox(o, d, lo, hi) {
 }
 
 function wallDistance(o,d) {
+  if(mapCollision)return mapCollision.distance(o,d);
   let result=150;
 
   for(const b of BLOCKS)
@@ -358,6 +363,15 @@ function detonate(g, now) {
 }
 
 function move(p,dt) {
+  if(mapCollision){
+    mapCollision.move(p,dt);
+    const b=MAP.bounds;
+    if(p.y<MAP.killY||p.x<b.minX||p.x>b.maxX||p.z<b.minZ||p.z>b.maxZ){
+      const s=SPAWNS.reduce((a,s)=>Math.hypot(s[0]-p.x,s[1]-p.z)<Math.hypot(a[0]-p.x,a[1]-p.z)?s:a);
+      Object.assign(p,{x:s[0],z:s[1],y:s[2],vy:0,ground:true});
+    }
+    return;
+  }
   const i=p.input;
   const f=Number(!!i.forward)-Number(!!i.back);
   const s=Number(!!i.right)-Number(!!i.left);
@@ -473,6 +487,7 @@ const app = http.createServer((req, res) => {
       "Cache-Control": "no-store"
     });
     return res.end(
+      `export const MAP=${JSON.stringify(MAP)};\n` +
       `export const WEAPONS=${JSON.stringify(WEAPONS)};\n` +
       `export const SKINS=${JSON.stringify(SKINS)};\n` +
       `export const DECOR=${JSON.stringify(DECOR)};export const PROPS=${JSON.stringify(PROPS)};export const AREAS=${JSON.stringify(AREAS)};\n` +
@@ -480,7 +495,18 @@ const app = http.createServer((req, res) => {
     );
   }
 
+  if(pathname==='/map-collision.js'){
+    const code=fs.readFileSync(path.join(__dirname,'map-collision.cjs'),'utf8')
+      .replace("const THREE=require('three');","import * as THREE from '/three.module.js';")
+      .replace('module.exports={MapCollision};','export {MapCollision};');
+    res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(code);
+  }
   const routes = {
+    '/maps/subzero.glb':['public/maps/subzero.glb','model/gltf-binary'],
+    '/maps/subzero-collision.bin':['public/maps/subzero-collision.bin','application/octet-stream'],
+    '/addons/loaders/GLTFLoader.js':['node_modules/three/examples/jsm/loaders/GLTFLoader.js','text/javascript'],
+    '/addons/utils/BufferGeometryUtils.js':['node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','text/javascript'],
+    '/addons/utils/SkeletonUtils.js':['node_modules/three/examples/jsm/utils/SkeletonUtils.js','text/javascript'],
     "/": ["index.html", "text/html"],
     "/index.html": ["index.html", "text/html"],
     "/district.css": ["district.css", "text/css"],
@@ -498,14 +524,21 @@ const app = http.createServer((req, res) => {
     return res.end("Not found");
   }
 
-  fs.readFile(path.join(__dirname, route[0]), (error, data) => {
+  const mapAsset=pathname.startsWith('/maps/');
+  const compressed=mapAsset && /\bgzip\b/.test(req.headers['accept-encoding']||'');
+  fs.readFile(path.join(__dirname, route[0]+(compressed?'.gz':'')), (error, data) => {
     if (error) {
       res.writeHead(500);
       return res.end("Missing game file. Run npm install three ws.");
     }
+    const etag='"'+crypto.createHash('sha256').update(data).digest('hex').slice(0,24)+'"';
+    if(mapAsset && req.headers['if-none-match']===etag){res.writeHead(304,{'ETag':etag,'Vary':'Accept-Encoding','Cache-Control':'public, max-age=0, must-revalidate'});return res.end();}
     res.writeHead(200, {
+      ...(mapAsset?{'ETag':etag,'Vary':'Accept-Encoding','X-File-Size':fs.statSync(path.join(__dirname,route[0])).size}:{}),
+      ...(compressed?{'Content-Encoding':'gzip'}:{}),
+      'Content-Length':data.length,
       "Content-Type": route[1],
-      "Cache-Control": "no-store"
+      "Cache-Control": pathname.startsWith("/maps/") ? "public, max-age=0, must-revalidate" : "no-store"
     });
     res.end(data);
   });
@@ -734,7 +767,7 @@ setInterval(() => {
 app.on("error",error=>{console.error(error.code==="EADDRINUSE"?`Port ${PORT} is busy. Stop the old server with Control+C, then try again.`:error.message);process.exit(1);});
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("\nNEON YARD — MILL DISTRICT / Complete upgrade");
+  console.log("\nNEON YARD — "+(MAP?.name||"Mill District"));
   console.log(`This computer: http://localhost:${PORT}`);
   console.log("Friends can try one of these local addresses:");
 
@@ -750,6 +783,7 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 function groundAt(x,z) {
+  if(mapCollision){const s=SPAWNS.find(s=>s[0]===x&&s[1]===z);return s?s[2]:mapCollision.support(x,z,3.5,10);}
   let floor=0;
 
   for(const b of BLOCKS)
@@ -760,6 +794,7 @@ function groundAt(x,z) {
 }
 
 function projectileBlocked(x,y,z,r=.12) {
+  if(mapCollision)return mapCollision.projectile(x,y,z,r);
   return BLOCKS.some(b =>
     x+r>b.x-b.w/2 && x-r<b.x+b.w/2 &&
     z+r>b.z-b.d/2 && z-r<b.z+b.d/2 &&
@@ -802,6 +837,7 @@ function spawnSafety(s,enemies) {
 }
 
 function surfaceAt(o,d,dist) {
+ if(mapCollision)return dist<150?'concrete':'air';
  for(const b of BLOCKS) {
  const hit=rayBox(o,d,{x:b.x-b.w/2,y:b.y,z:b.z-b.d/2},{x:b.x+b.w/2,y:b.y+b.h,z:b.z+b.d/2});
  if(Math.abs(hit-dist)<.015)return b.mat;
@@ -809,6 +845,7 @@ function surfaceAt(o,d,dist) {
 }
 
 function floorSurface(p){
+ if(mapCollision)return 'concrete';
  const surfaces=BLOCKS.filter(b=>overlaps(p.x,p.z,.2,b)&&Math.abs(b.y+b.h-p.y)<.08);
  if(p.y<.1){if(p.x<-10)return 'grass';if(Math.abs(p.x-3)<4.5||Math.abs(p.z)<3.5)return 'tile';return 'dirt';}
  return surfaces.at(-1)?.mat||'concrete';
