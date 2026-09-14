@@ -1,0 +1,27 @@
+/* Warm utility panels and clear, block-inspired combat typography. */
+:root{--ink:#f4efde;--muted:#b4b8a0;--panel:#242b23;--line:#505944;--cyan:#c8dc86;--orange:#efb878}
+body{background:#232a22;font-family:Arial,Helvetica,sans-serif}
+.overlay{background:linear-gradient(100deg,#19251feb,#202c24b0 62%,#252c2355)}
+.panel{background:linear-gradient(145deg,#2b352bed,#1d2821f2);border-color:#b7bb8a40;border-radius:4px}
+button,input,select,.tag{border-radius:3px}button{background:#344235}button:hover{background:#475a42}button.active{background:#536440;border-color:#d5e68e}input,select{background:#1b291f}
+h1,h2,#clock,#ammo,#health{font-family:Impact,'Arial Black',Arial,sans-serif;font-weight:900}
+h1{letter-spacing:-2px;font-size:clamp(52px,7vw,87px)}h1 span{color:#d7e798}
+.hero p{color:#ddd9be}.topline{color:#d7e798}.primary{box-shadow:0 3px 0 #84994a}
+.weapon{position:relative;min-height:82px}.weapon.active:after{content:'✓';position:absolute;right:12px;top:10px;color:#e0eda4}.weapons{gap:8px}
+#menu .shell{max-width:1040px}#hud #topHud{border-radius:2px;background:#273123bf;padding:9px 25px;border:1px solid #e2d3a24d}
+#hud #clock{font-size:36px;letter-spacing:1px}#hud #status{color:#e0e7bb;letter-spacing:1.3px}
+#hud #bottomLeft,#hud #bottomRight{background:#273123b8;border:0;border-left:4px solid #d0df8b;padding:10px 16px}
+#hud #bottomRight{border-left:0;border-right:4px solid #d0df8b;min-width:240px}
+#hud #health{font-size:44px}#hud #ammo{font-size:44px}#hud #gunName{color:#eef0cf}
+#healthBar{background:#bce77c!important}.bar{height:8px;border-radius:0}.bar div{border-radius:0}
+#hud #crosshair{width:22px;height:22px;border:0;background:radial-gradient(circle,#d2ee99 1px,transparent 2px)}
+#hud #crosshair:before{height:2px;width:22px;left:0;top:10px;background:linear-gradient(90deg,#fff 0 25%,transparent 25% 75%,#fff 75%)}
+#hud #crosshair:after{width:2px;height:22px;left:10px;top:0;background:linear-gradient(#fff 0 25%,transparent 25% 75%,#fff 75%)}
+#hud #help{background:#2731239c;color:#eee9d2;font-size:10px}.feedline{border-radius:2px;background:#273123af;border-right-color:#d7df92}
+#message{font-family:Impact,'Arial Black',Arial,sans-serif;letter-spacing:1px;font-size:28px}
+#labels{position:absolute;inset:0;pointer-events:none}.playerLabel{position:absolute;left:0;top:0;text-align:center;color:#fff4d4;text-shadow:1px 2px 2px #172419;font-size:12px;white-space:nowrap}
+.playerLabel span{display:block;margin:4px auto 0;width:58px;height:4px;background:#1e261dc9}.playerLabel i{display:block;background:#c8e893;height:100%}
+#reloadTrack{position:absolute;left:50%;top:57%;transform:translateX(-50%);width:130px;height:4px;background:#273123b5;opacity:0}#reloadTrack div{height:100%;background:#d4e695}
+#compass{position:absolute;left:50%;top:106px;transform:translateX(-50%);font:10px monospace;letter-spacing:3px;color:#fff4d4;text-shadow:0 1px 3px #333}
+.setting{margin-top:12px}.modal{max-height:92vh;overflow:auto}#settings .modal{width:min(730px,100%)}
+@media(max-height:800px){#menu .overlay{padding:12px}.topline{margin-bottom:12px}h1{font-size:62px;margin-bottom:17px}.panel{padding:17px}.space{margin-top:12px}.weapon{min-height:70px}.hero p{line-height:1.45}}

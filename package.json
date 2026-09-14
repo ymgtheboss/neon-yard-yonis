@@ -1,0 +1,14 @@
+{
+  "name": "neon-yard-mill-district",
+  "version": "4.0.0",
+  "private": true,
+  "description": "A locally hosted multiplayer browser arena with the Mill District map.",
+  "scripts": {
+    "start": "node server.cjs",
+    "test": "node tests/run.cjs"
+  },
+  "dependencies": {
+    "three": "0.186.0",
+    "ws": "8.21.3"
+  }
+}
