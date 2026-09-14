@@ -1,6 +1,6 @@
 const {spawnSync}=require('node:child_process');
 const path=require('node:path');
-for(const name of ['engine','client','subzero','map-asset','network']) {
+for(const name of ['engine','client','subzero','combat','map-asset','network']) {
  const r=spawnSync(process.execPath,[path.join(__dirname,name+'.cjs')],{stdio:'inherit'});
  if(r.status!==0)process.exit(r.status||1);
 }

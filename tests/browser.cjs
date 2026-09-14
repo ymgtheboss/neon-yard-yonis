@@ -2,8 +2,8 @@
 // Optional real-browser smoke test. Uses an isolated, temporary Chrome profile.
 const {spawn}=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict'),WS=require('ws');
 const root=path.join(__dirname,'..'),port=18282,debug=18283,profile=fs.mkdtempSync(path.join(os.tmpdir(),'neon-subzero-browser-'));
-const server=spawn(process.execPath,[path.join(root,'server.cjs')],{env:{...process.env,PORT:String(port)},stdio:'ignore'});
-let browser,ws,serial=0;const pending=new Map(),errors=[];const delay=ms=>new Promise(r=>setTimeout(r,ms));
+const server=spawn(process.execPath,[path.join(root,'server.cjs')],{env:{...process.env,PORT:String(port),ROUND_MS:'20000'},stdio:'ignore'});
+let browser,ws,serial=0;const bots=[];const pending=new Map(),errors=[];const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label){for(let i=0;i<150;i++){try{const v=await fn();if(v)return v;}catch{}await delay(200);}throw Error('Timed out: '+label);}
 function call(method,params={}){return new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});}
 async function evaluate(expression){const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.text);return r.result.value;}
@@ -14,7 +14,11 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
  ws=new WS(target.webSocketDebuggerUrl);await new Promise(r=>ws.once('open',r));ws.on('message',raw=>{const m=JSON.parse(raw);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);});
  await call('Runtime.enable');await call('Page.enable');await call('Page.navigate',{url:`http://127.0.0.1:${port}`});
  await until(()=>evaluate("document.getElementById('joinMessage')?.textContent==='Subzero ready'"),'Subzero GLB, textures and collision loading');
- await evaluate("document.getElementById('join').click()");await until(()=>evaluate("!document.getElementById('room').classList.contains('hidden')"),'join lobby');await evaluate("document.getElementById('start').click()");await delay(1500);
+ const menuShot=await call('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});fs.writeFileSync(path.join(__dirname,'artifacts/combat-menu.png'),Buffer.from(menuShot.data,'base64'));
+ for(const [i,gun]of ['pistol','shotgun','sniper','smg','revolver','lmg','dmr','carbine','autoshot'].entries()){
+  const bot=new WS(`ws://127.0.0.1:${port}`);bots.push(bot);await new Promise(r=>bot.once('open',r));bot.send(JSON.stringify({type:'join',name:'Operator '+(i+1),skin:['ember','arctic','royal'][i%3],loadout:[gun,'rifle'],grenades:['frag','medkit']}));
+ }
+ await evaluate("document.getElementById('join').click()");await until(()=>evaluate("!document.getElementById('room').classList.contains('hidden')"),'join lobby');bots[0].send(JSON.stringify({type:'start'}));await delay(1500);for(const bot of bots)bot.send(JSON.stringify({type:'input',fire:true,yaw:0,pitch:0}));
  const resume=await evaluate("(()=>{const r=document.getElementById('resume').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
  await call('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...resume});
  await call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...resume});
@@ -23,5 +27,7 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
  // Headless mouse capture is platform-dependent; hide a remaining pause panel only for the visual artifact.
  await evaluate("document.getElementById('room').classList.add('hidden')");
  const screenshot=await call('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});fs.writeFileSync(path.join(__dirname,'artifacts/subzero-browser.png'),Buffer.from(screenshot.data,'base64'));
- assert.deepEqual(errors,[]);console.log('PASS Chrome loads the Subzero map and textures, joins multiplayer and starts a round without uncaught JavaScript errors');console.log('Software-rendered browser telemetry (not hardware FPS):',telemetry);console.log('Screenshot: tests/artifacts/subzero-browser.png');
-})().catch(e=>{console.error(e,errors);process.exitCode=1;}).finally(()=>{ws?.close();browser?.kill();server.kill();});
+ await until(()=>evaluate("document.getElementById('boardTitle')?.textContent==='Round complete.'&&!document.getElementById('board').classList.contains('hidden')"),'end of round results');
+ const results=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'artifacts/combat-results.png'),Buffer.from(results.data,'base64'));
+ assert.deepEqual(errors,[]);console.log('PASS Chrome loads the armory and operator preview, renders all ten weapon types in multiplayer, and displays round results without uncaught JavaScript errors');console.log('Software-rendered browser telemetry (not hardware FPS):',telemetry);console.log('Screenshot: tests/artifacts/subzero-browser.png');
+})().catch(e=>{console.error(e,errors);process.exitCode=1;}).finally(()=>{for(const bot of bots)bot.terminate();ws?.close();browser?.kill();server.kill();});

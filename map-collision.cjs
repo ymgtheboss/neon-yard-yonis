@@ -1,26 +1,82 @@
 'use strict';
 const THREE=require('three');
+const {CHARACTER_SCALE}=require('./character-config.js');
 // Static triangle BVH. Bounds only reject candidates; final tests use triangles,
 // preserving doors, arches, sloping ground and gaps in the original geometry.
+function bodyShape(p) {
+ const stance=p.stance||'stand';
+ const height=({stand:1.72,crouch:1.12,prone:.52,slide:.9}[stance]||1.72)*CHARACTER_SCALE;
+ return {height,eye:height-.17*CHARACTER_SCALE,rx:(stance==='prone'?.78:.36)*CHARACTER_SCALE,rz:(stance==='prone'?.78:.36)*CHARACTER_SCALE};
+}
 class MapCollision {
  constructor(data){this.triangles=[];const v=new THREE.Vector3();for(let i=0;i<data.length;i+=9){const t=new THREE.Triangle(new THREE.Vector3(data[i],data[i+1],data[i+2]),new THREE.Vector3(data[i+3],data[i+4],data[i+5]),new THREE.Vector3(data[i+6],data[i+7],data[i+8]));this.triangles.push({t,b:new THREE.Box3().setFromPoints([t.a,t.b,t.c]),normal:t.getNormal(v).clone()});}this.root=this.build(this.triangles.slice());this.box=new THREE.Box3();this.point=new THREE.Vector3();this.ray=new THREE.Ray();}
  build(items){const box=new THREE.Box3();for(const t of items)box.union(t.b);if(items.length<=12)return {box,items};const s=box.getSize(new THREE.Vector3()),axis=s.x>s.y&&s.x>s.z?'x':s.y>s.z?'y':'z';items.sort((a,b)=>(a.b.min[axis]+a.b.max[axis])-(b.b.min[axis]+b.b.max[axis]));const mid=items.length>>1;return {box,left:this.build(items.slice(0,mid)),right:this.build(items.slice(mid))};}
  intersects(box,node=this.root){if(!node.box.intersectsBox(box))return false;if(node.items)return node.items.some(a=>a.b.intersectsBox(box)&&box.intersectsTriangle(a.t));return this.intersects(box,node.left)||this.intersects(box,node.right);}
- blocked(x,y,z,r=.36){this.box.min.set(x-r,y+.018,z-r);this.box.max.set(x+r,y+1.702,z+r);return this.intersects(this.box);}
+ blocked(x,y,z,r=.36*CHARACTER_SCALE,height=1.72*CHARACTER_SCALE,rz=r){this.box.min.set(x-r,y+.018,z-rz);this.box.max.set(x+r,y+height-.018,z+rz);return this.intersects(this.box);}
  projectile(x,y,z,r=.12){this.box.min.set(x-r,y-r,z-r);this.box.max.set(x+r,y+r,z+r);return this.intersects(this.box);}
  distance(o,d,max=150,walkable=false){this.ray.origin.set(o.x,o.y,o.z);this.ray.direction.set(d.x,d.y,d.z);let nearest=max;const point=this.point,ray=this.ray;const visit=node=>{if(!ray.intersectBox(node.box,point)||point.distanceTo(ray.origin)>nearest&&!node.box.containsPoint(ray.origin))return;if(node.items){for(const a of node.items){if(walkable&&a.normal.y<.6)continue;if(ray.intersectTriangle(a.t.a,a.t.b,a.t.c,false,point)){const dist=point.distanceTo(ray.origin);if(dist<nearest)nearest=dist;}}}else{visit(node.left);visit(node.right);}};visit(this.root);return nearest;}
  floor(x,z,top,drop=100){const dist=this.distance({x,y:top,z},{x:0,y:-1,z:0},drop,true);return dist<drop?top-dist:-Infinity;}
- support(x,z,top,drop=.6){let y=-Infinity;for(const [dx,dz]of [[0,0],[-.36,-.36],[.36,-.36],[-.36,.36],[.36,.36]])y=Math.max(y,this.floor(x+dx,z+dz,top,drop));return y;}
- move(p,dt){dt=Math.min(dt,.1);const i=p.input,f=+!!i.forward-+!!i.back,s=+!!i.right-+!!i.left,length=Math.hypot(f,s)||1,speed=i.aim?3.5:i.sprint&&!i.fire?9:6,dx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed*dt,dz=(-Math.cos(p.yaw)*f-Math.sin(p.yaw)*s)/length*speed*dt;if(i.jump&&p.ground){p.vy=7.8;p.ground=false;}const steps=Math.max(1,Math.ceil(dt/.008)),sub=dt/steps;
- for(let n=0;n<steps;n++){
-  for(const axis of ['x','z']){const delta=(axis==='x'?dx:dz)/steps,next=p[axis]+delta,x=axis==='x'?next:p.x,z=axis==='z'?next:p.z;if(!this.blocked(x,p.y,z)){p[axis]=next;continue;}
-   if(p.ground){const top=this.support(x,z,p.y+.29,.58);if(top>p.y+.001&&top<=p.y+.285&&!this.blocked(x,top,z)&&!this.blocked(p.x,top,p.z)){p.y=top;p[axis]=next;}}
+ support(x,z,top,drop=.6,rx=.36*CHARACTER_SCALE,rz=.36*CHARACTER_SCALE){let y=-Infinity;for(const [dx,dz]of [[0,0],[-rx,-rz],[rx,-rz],[-rx,rz],[rx,rz]])y=Math.max(y,this.floor(x+dx,z+dz,top,drop));return y;}
+ move(p,dt) {
+  dt=Math.min(Math.max(dt,0),.1);
+  const i=p.input||{};
+  p.motionTime=(p.motionTime||0)+dt;
+  p.stance=p.stance||'stand';p.vx=p.vx||0;p.vz=p.vz||0;
+  if(p.ground)p.lastGroundAt=p.motionTime;
+  if(i.jump&&!p.jumpHeld)p.jumpUntil=p.motionTime+.12;
+  p.jumpHeld=!!i.jump;
+  const crouchEdge=(i.crouch||i.slide)&&!p.crouchHeld;
+  p.crouchHeld=!!(i.crouch||i.slide);
+  let requested=i.prone?'prone':i.crouch?'crouch':'stand';
+  if(crouchEdge&&p.ground&&i.sprint&&Math.hypot(p.vx,p.vz)>5.5&&p.motionTime>=(p.slideReadyAt||0)&&!i.prone){
+   p.slideUntil=p.motionTime+.8;p.slideReadyAt=p.motionTime+1.65;
+   const v=Math.hypot(p.vx,p.vz);p.vx=p.vx/v*11;p.vz=p.vz/v*11;
   }
-  const old=p.y,wasGround=p.ground;p.vy-=23*sub;let next=old+p.vy*sub;p.ground=false;
-  if(p.vy<=0){const floor=this.support(p.x,p.z,old+.025,Math.max(.06,old-next+.03)+(wasGround?.27:0));if(floor>=next-(wasGround?.27:0)&&floor<=old+.025&&!this.blocked(p.x,floor,p.z)){next=floor;p.vy=0;p.ground=true;}}
-  if(this.blocked(p.x,next,p.z)){let safe=old,bad=next;for(let k=0;k<10;k++){const mid=(safe+bad)/2;if(this.blocked(p.x,mid,p.z))bad=mid;else safe=mid;}next=safe;if(p.vy<0)p.ground=true;p.vy=0;}
-  p.y=next;
- }
+  if(p.motionTime<(p.slideUntil||0))requested='slide';
+  const desired=bodyShape({...p,stance:requested});
+  // Always check the complete new volume, including the longer prone body.
+  if(!this.blocked(p.x,p.y,p.z,desired.rx,desired.height,desired.rz))p.stance=requested;
+  const shape=bodyShape(p),blocked=(x,y,z)=>this.blocked(x,y,z,shape.rx,shape.height,shape.rz);
+  const support=(x,z,top,drop)=>this.support(x,z,top,drop,shape.rx,shape.rz);
+  if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.09)&&p.stance!=='prone'){
+   p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
+  }
+  const f=Number(!!i.forward)-Number(!!i.back),s=Number(!!i.right)-Number(!!i.left),length=Math.hypot(f,s)||1;
+  const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&!i.fire?9:6;
+  const tx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed;
+  const tz=(-Math.cos(p.yaw)*f-Math.sin(p.yaw)*s)/length*speed;
+  const steps=Math.max(1,Math.ceil(dt/.008)),sub=dt/steps;
+  for(let n=0;n<steps;n++){
+   if(p.stance==='slide'&&p.motionTime<(p.slideUntil||0)){
+    const friction=Math.exp(-1.25*sub);p.vx*=friction;p.vz*=friction;
+   } else {
+    const blend=1-Math.exp(-(p.ground?(f||s?18:24):3.8)*sub);
+    p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
+   }
+   for(const axis of ['x','z']){
+    const velocity=axis==='x'?'vx':'vz',next=p[axis]+p[velocity]*sub;
+    const x=axis==='x'?next:p.x,z=axis==='z'?next:p.z;
+    if(!blocked(x,p.y,z)){p[axis]=next;continue;}
+    if(p.ground&&p.stance!=='prone'){
+     const top=support(x,z,p.y+.29,.58);
+     if(top>p.y+.001&&top<=p.y+.285&&!blocked(x,top,z)&&!blocked(p.x,top,p.z)){p.y=top;p[axis]=next;continue;}
+    }
+    p[velocity]=0;
+   }
+   const old=p.y,wasGround=p.ground;
+   p.vy-=(p.vy>0?19.5:24)*sub;
+   let next=old+p.vy*sub;p.ground=false;
+   if(p.vy<=0){
+    const floor=support(p.x,p.z,old+.025,Math.max(.06,old-next+.03)+(wasGround?.27:0));
+    if(floor>=next-(wasGround?.27:0)&&floor<=old+.025&&!blocked(p.x,floor,p.z)){next=floor;p.vy=0;p.ground=true;}
+   }
+   if(blocked(p.x,next,p.z)){
+    let safe=old,bad=next;
+    for(let k=0;k<10;k++){const mid=(safe+bad)/2;if(blocked(p.x,mid,p.z))bad=mid;else safe=mid;}
+    next=safe;if(p.vy<0)p.ground=true;p.vy=0;
+   }
+   p.y=next;
+  }
  }
 }
-module.exports={MapCollision};
+module.exports={MapCollision,bodyShape};

@@ -1,3 +1,7 @@
+# Combat Operations update
+
+The latest controls and equipment rules are in [COMBAT-UPGRADE.md](COMBAT-UPGRADE.md). Run `npm start` and refresh the game to use the new armory.
+
 # NEON YARD — Subzero
 
 Subzero is now the default map. See [SUBZERO.md](SUBZERO.md) for startup, optimization, collision, attribution, and validation details. The Mill District instructions below describe the retained legacy arena (`WORLD_MAP=mill npm start`).

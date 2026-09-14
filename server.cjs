@@ -36,6 +36,11 @@ const WEAPONS = {
     reload: 2.4, spread: 0.075, pellets: 1,
     auto: false, color: "#c0a0ff"
   },
+  revolver: {name:"BASILISK / Revolver",damage:55,rate:.48,magazine:6,reload:2.2,spread:.009,pellets:1,auto:false,color:"#efbd78"},
+  lmg: {name:"ATLAS / LMG",damage:25,rate:.12,magazine:70,reload:3.6,spread:.032,pellets:1,auto:true,color:"#b9cb74"},
+  dmr: {name:"KESTREL / DMR",damage:46,rate:.34,magazine:15,reload:2.05,spread:.016,pellets:1,auto:false,color:"#aabcf0"},
+  carbine: {name:"WRAITH / Carbine",damage:21,rate:.088,magazine:28,reload:1.65,spread:.02,pellets:1,auto:true,color:"#e791b4"},
+  autoshot: {name:"MAUL / Auto shotgun",damage:10,rate:.34,magazine:12,reload:2.8,spread:.105,pellets:7,auto:true,color:"#f18468"},
   smg: {
     name: "RUSH / SMG",
     damage: 17, rate: 0.068, magazine: 36,
@@ -50,12 +55,14 @@ const SKINS = {
   violet: "#b99cff",
   lime: "#b7ea75",
   rose: "#ff81ac",
-  ice: "#e3efff"
+  ice: "#e3efff",
+  obsidian:"#657088", desert:"#d1a977", woodland:"#819964", ember:"#da6744", arctic:"#bddcec", royal:"#9d80d8"
 };
 
 const { BLOCKS, DECOR, PROPS, AREAS, SPAWNS, MAP } = require('./world-data.cjs');
 
-const {MapCollision}=require('./map-collision.cjs');
+const {CHARACTER_SCALE}=require('./character-config.js');
+const {MapCollision,bodyShape}=require('./map-collision.cjs');
 const mapCollision=MAP?(()=>{const b=fs.readFileSync(path.join(__dirname,'public/maps/subzero-collision.bin'));return new MapCollision(new Float32Array(b.buffer,b.byteOffset,b.byteLength/4));})():null;
 
 let phase = "lobby";
@@ -104,7 +111,7 @@ function cleanLoadout(v) {
 
 function cleanGrenades(v) {
   return [0, 1].map(i =>
-    v && v[i] === "smoke" ? "smoke" : "flash"
+    v && ["smoke","flash","frag","medkit"].includes(v[i]) ? v[i] : "flash"
   );
 }
 
@@ -115,10 +122,10 @@ function overlaps(x, z, radius, b) {
     z - radius < b.z + b.d / 2;
 }
 
-function blocked(x,y,z,radius=.36) {
+function blocked(x,y,z,radius=.36*CHARACTER_SCALE) {
   if(mapCollision)return mapCollision.blocked(x,y,z,radius);
   return BLOCKS.some(b =>
-    y+1.72>b.y+.015 &&
+    y+1.72*CHARACTER_SCALE>b.y+.015 &&
     y<b.y+b.h-.015 &&
     overlaps(x,z,radius,b)
   );
@@ -138,9 +145,11 @@ function spawn(p, now) {
 
   Object.assign(p, {
     x: s[0], y: groundAt(s[0],s[1]), ground: true, z: s[1], vy: 0,
+    vx:0,vz:0,stance:'stand',motionTime:0,slideUntil:0,slideReadyAt:0,jumpHeld:false,crouchHeld:false,jumpUntil:-1,lastGroundAt:-100,
     hp: 100, aliveAt: 0, shield: now + 1500,
     slot: 0, reloadAt: 0, nextShot: 0,
-    grenades: [true, true],
+    grenades: (p.gearReadyAt||[0,0]).map(t=>now>=t),
+    gearReadyAt:p.gearReadyAt||[0,0],
     guns: [...p.loadout],
     ammo: p.loadout.map(id => WEAPONS[id].magazine),
     input: {}, lastInput: now, wasFire: false,
@@ -192,7 +201,7 @@ function reload(p, now) {
   const w = WEAPONS[p.guns[p.slot]];
   if (!p.reloadAt && p.ammo[p.slot] < w.magazine) {
     p.reloadAt = now + w.reload * 1000;
-    event({kind:'reload',id:p.id,gun:p.guns[p.slot],x:p.x,y:p.y+1,z:p.z,duration:w.reload});
+    event({kind:'reload',id:p.id,gun:p.guns[p.slot],x:p.x,y:playerEye(p).y,z:p.z,duration:w.reload});
   }
 }
 
@@ -206,14 +215,14 @@ function shoot(p, now) {
   p.nextShot = now + w.rate * 1000;
 
   
-  const eye={x:p.x,y:p.y+1.55,z:p.z};
+  const eye=playerEye(p);
   const forward=direction(p.yaw,p.pitch);
   const right={x:Math.cos(p.yaw),z:-Math.sin(p.yaw)};
 
   const o={
-    x:eye.x+right.x*.18+forward.x*.45,
-    y:eye.y-.15+forward.y*.45,
-    z:eye.z+right.z*.18+forward.z*.45
+    x:eye.x+(right.x*.18+forward.x*.45)*CHARACTER_SCALE,
+    y:eye.y+(-.15+forward.y*.45)*CHARACTER_SCALE,
+    z:eye.z+(right.z*.18+forward.z*.45)*CHARACTER_SCALE
   };
 
   const mx=o.x-eye.x,my=o.y-eye.y,mz=o.z-eye.z;
@@ -227,7 +236,7 @@ function shoot(p, now) {
     return;
   }
   
-  p.ammo[p.slot]--;
+  p.ammo[p.slot]--;p.shots=(p.shots||0)+1;
   p.shield = 0;
   const shots = [];
   const damage = new Map();
@@ -236,6 +245,9 @@ function shoot(p, now) {
     let spread = w.spread;
     if (p.input.aim) spread *= id === "sniper" ? 0.012 : 0.45;
     if (!p.ground) spread *= 1.7;
+    if(p.stance==='crouch')spread*=.8;
+    if(p.stance==='prone')spread*=.55;
+    if(p.stance==='slide')spread*=1.5;
 
     const yaw = p.yaw + (Math.random() - 0.5) * spread;
     const pitch = p.pitch + (Math.random() - 0.5) * spread;
@@ -246,12 +258,7 @@ function shoot(p, now) {
     for (const q of players.values()) {
       if (q === p || q.hp <= 0 || q.shield > now) continue;
 
-      const head = raySphere(o, d,
-        { x: q.x, y: q.y + 1.52, z: q.z }, 0.26);
-
-      const body = rayBox(o, d,
-        { x: q.x - 0.32, y: q.y + 0.05, z: q.z - 0.32 },
-        { x: q.x + 0.32, y: q.y + 1.32, z: q.z + 0.32 });
+      const {head,body}=playerHit(q,o,d);
 
       const hit = Math.min(head, body);
       if (hit < distance) {
@@ -268,7 +275,7 @@ function shoot(p, now) {
     });
 
     if (victim) {
-      const falloff = id === "shotgun"
+      const falloff = (id === "shotgun" || id === "autoshot")
         ? clamp(1 - distance / 50, 0.2, 1)
         : id === "smg" ? clamp(1 - distance / 140, 0.45, 1) : 1;
 
@@ -279,56 +286,88 @@ function shoot(p, now) {
     }
   }
 
+  if(damage.size)p.hits=(p.hits||0)+1;
   event({ kind: "shot", id: p.id, gun: id, origin: o, ends: shots });
 
   for (const [id, hit] of damage) {
     const q = players.get(id);
     if (!q || q.hp <= 0) continue;
-    p.damage += Math.min(q.hp, hit.amount);
-    q.hp = Math.max(0, q.hp - hit.amount);
-
-    send(clients.get(p.id), {
-      type: "event", kind: "hit",
-      head: hit.head, kill: q.hp === 0
-    });
-
-    send(clients.get(q.id), {
-      type: "event", kind: "hurt", amount: hit.amount
-    });
-
-    if (q.hp === 0) {
-      q.deaths++;
-      q.aliveAt = now + RESPAWN;
-      q.reloadAt = 0;
-      p.kills++;
-      p.streak++;
-      event({
-        kind: "kill",
-        killer: p.name, victim: q.name,
-        gun: p.guns[p.slot], head: hit.head,
-        streak: p.streak, killerId:p.id, victimId:q.id
-      });
-    }
+    applyDamage(p,q,hit.amount,now,p.guns[p.slot],hit.head);
   }
 }
 
+function playerEye(p){const h=bodyShape(p).eye;return {x:p.x,y:p.y+h,z:p.z};}
+function playerHead(p){const h=bodyShape(p).height;return {x:p.x-(p.stance==='prone'?Math.sin(p.yaw)*.48*CHARACTER_SCALE:0),y:p.y+h-.2*CHARACTER_SCALE,z:p.z-(p.stance==='prone'?Math.cos(p.yaw)*.48*CHARACTER_SCALE:0)};}
+function playerBounds(p){const h=bodyShape(p);return {lo:{x:p.x-h.rx,y:p.y+.04*CHARACTER_SCALE,z:p.z-h.rz},hi:{x:p.x+h.rx,y:p.y+(p.stance==='prone'?h.height:h.height-.4*CHARACTER_SCALE),z:p.z+h.rz}};}
+function playerHit(p,o,d){
+ const head=raySphere(o,d,playerHead(p),Math.min(.24*CHARACTER_SCALE,bodyShape(p).height*.28));
+ if(p.stance==='prone'){
+  const c=Math.cos(p.yaw),s=Math.sin(p.yaw),x=o.x-p.x,z=o.z-p.z;
+  const origin={x:c*x-s*z,y:o.y-p.y,z:s*x+c*z};
+  const direction={x:c*d.x-s*d.z,y:d.y,z:s*d.x+c*d.z};
+  return {head,body:rayBox(origin,direction,{x:-.3*CHARACTER_SCALE,y:.04*CHARACTER_SCALE,z:-.35*CHARACTER_SCALE},{x:.3*CHARACTER_SCALE,y:.3*CHARACTER_SCALE,z:.78*CHARACTER_SCALE})};
+ }
+ const bounds=playerBounds(p);return {head,body:rayBox(o,d,bounds.lo,bounds.hi)};
+}
+function applyDamage(attacker,victim,amount,now,gun,head=false){
+ if(victim.hp<=0||victim.shield>now)return;
+ const dealt=Math.min(victim.hp,Math.max(0,Math.round(amount)));
+ if(attacker&&attacker!==victim)attacker.damage+=dealt;
+ victim.hp-=dealt;
+ if(attacker&&attacker!==victim)send(clients.get(attacker.id),{type:'event',kind:'hit',head,kill:victim.hp===0});
+ send(clients.get(victim.id),{type:'event',kind:'hurt',amount:dealt});
+ if(victim.hp===0){
+  victim.deaths++;victim.aliveAt=now+RESPAWN;victim.reloadAt=0;
+  if(attacker&&attacker!==victim){attacker.kills++;attacker.streak++;attacker.bestStreak=Math.max(attacker.bestStreak||0,attacker.streak);}
+  event({kind:'kill',killer:attacker?.name||'Explosion',victim:victim.name,gun,head,streak:attacker?.streak||0,killerId:attacker?.id,victimId:victim.id});
+ }
+}
+function refreshEquipment(p,now){
+ p.gearReadyAt=p.gearReadyAt||[0,0];
+ for(let i=0;i<2;i++)if(!p.grenades[i]&&now>=p.gearReadyAt[i])p.grenades[i]=true;
+}
+function changeLoadout(p,m,now){
+ if(phase==='playing'){send(clients.get(p.id),{type:'error',message:'Loadout locked until this round ends.'});return false;}
+ p.loadout=cleanLoadout(m.loadout);p.grenadeLoadout=cleanGrenades(m.grenades);
+ if(SKINS[m.skin])p.skin=m.skin;spawn(p,now);return true;
+}
+
 function throwGrenade(p, index, now) {
-  if (!p.grenades[index]) return;
-  p.grenades[index] = false;
+  refreshEquipment(p,now);
+  if (!p.grenades[index]||p.hp<=0) return;
+  if(p.grenadeLoadout[index]==='medkit'&&p.hp>=100){send(clients.get(p.id),{type:'event',kind:'notice',message:'Health is already full.'});return;}
+  p.grenades[index] = false;p.gearReadyAt[index]=now+15000;
+  if(p.grenadeLoadout[index]==='medkit'){
+   const amount=Math.min(45,100-p.hp);p.hp+=amount;
+   event({kind:'heal',id:p.id,x:p.x,y:p.y+.7,z:p.z,amount});return;
+  }
   p.shield = 0;
   const d = direction(p.yaw, clamp(p.pitch + 0.16, -1.2, 1.3));
 
-  event({kind:"throw",id:p.id,x:p.x,y:p.y+1,z:p.z});
+  event({kind:"throw",id:p.id,x:p.x,y:playerEye(p).y,z:p.z});
   grenades.push({
     id: ++serial, owner: p.id,
     kind: p.grenadeLoadout[index],
-    x: p.x, y: p.y + 1.45, z: p.z,
+    x: p.x, y: p.y + bodyShape(p).eye-.08*CHARACTER_SCALE, z: p.z,
     vx: d.x * 16, vy: d.y * 16 + 3, vz: d.z * 16,
     explodeAt: now + 1350
   });
 }
 
 function detonate(g, now) {
+  if(g.kind==='frag'){
+    event({kind:'explosion',x:g.x,y:g.y,z:g.z});
+    const owner=players.get(g.owner);
+    for(const p of players.values()){
+      if(p.hp<=0||p.shield>now)continue;
+      const center={x:p.x,y:p.y+bodyShape(p).height*.5,z:p.z};
+      const dx=center.x-g.x,dy=center.y-g.y,dz=center.z-g.z,dist=Math.hypot(dx,dy,dz);
+      if(dist>=8)continue;
+      if(dist>.01&&wallDistance(g,{x:dx/dist,y:dy/dist,z:dz/dist})<dist-.04)continue;
+      applyDamage(owner,p,110*Math.pow(1-dist/8,1.25),now,'frag');
+    }
+    return;
+  }
   if (g.kind === "smoke") {
     smokes.push({
       id: g.id, x: g.x, y: g.y, z: g.z,
@@ -342,7 +381,7 @@ function detonate(g, now) {
 
   for (const p of players.values()) {
     if (p.hp <= 0) continue;
-    const o = { x: p.x, y: p.y + 1.55, z: p.z };
+    const o = playerEye(p);
     const dx = g.x - o.x, dy = g.y - o.y, dz = g.z - o.z;
     const distance = Math.hypot(dx, dy, dz);
     if (distance > 24) continue;
@@ -368,7 +407,7 @@ function move(p,dt) {
     const b=MAP.bounds;
     if(p.y<MAP.killY||p.x<b.minX||p.x>b.maxX||p.z<b.minZ||p.z>b.maxZ){
       const s=SPAWNS.reduce((a,s)=>Math.hypot(s[0]-p.x,s[1]-p.z)<Math.hypot(a[0]-p.x,a[1]-p.z)?s:a);
-      Object.assign(p,{x:s[0],z:s[1],y:s[2],vy:0,ground:true});
+      Object.assign(p,{x:s[0],z:s[1],y:s[2],vx:0,vz:0,vy:0,ground:true,stance:"stand"});
     }
     return;
   }
@@ -405,7 +444,7 @@ function move(p,dt) {
         let top=p.y;
 
         for(const b of BLOCKS)
-          if(overlaps(x,z,.36,b) &&
+          if(overlaps(x,z,.36*CHARACTER_SCALE,b) &&
              b.y+b.h>p.y &&
              b.y+b.h<=p.y+.27)
             top=Math.max(top,b.y+b.h);
@@ -424,7 +463,7 @@ function move(p,dt) {
     p.ground=false;
 
     for(const b of BLOCKS) {
-      if(!overlaps(p.x,p.z,.34,b)) continue;
+      if(!overlaps(p.x,p.z,.34*CHARACTER_SCALE,b)) continue;
 
       const top=b.y+b.h;
 
@@ -434,10 +473,10 @@ function move(p,dt) {
         p.ground=true;
       } else if(
         p.vy>0 &&
-        old+1.72<=b.y+.025 &&
-        next+1.72>=b.y
+        old+1.72*CHARACTER_SCALE<=b.y+.025 &&
+        next+1.72*CHARACTER_SCALE>=b.y
       ) {
-        next=Math.min(next,b.y-1.72);
+        next=Math.min(next,b.y-1.72*CHARACTER_SCALE);
         p.vy=0;
       }
     }
@@ -459,7 +498,7 @@ function startRound() {
   smokes = [];
 
   for (const p of players.values()) {
-    p.kills = p.deaths = p.damage = 0;
+    p.gearReadyAt=[0,0];p.shots=0;p.hits=0;p.bestStreak=0;p.kills = p.deaths = p.damage = 0;
     spawn(p, now);
   }
 
@@ -472,8 +511,9 @@ function publicPlayer(p) {
     x: p.x, y: p.y, z: p.z,
     yaw: p.yaw, pitch: p.pitch,
     hp: p.hp, kills: p.kills, deaths: p.deaths,
-    damage: p.damage, streak: p.streak,
+    damage: p.damage, streak: p.streak,bestStreak:p.bestStreak||0,accuracy:p.shots?Math.round((p.hits||0)/p.shots*100):0,
     aliveAt: p.aliveAt, shield: p.shield,
+    stance:p.stance||'stand',vx:p.vx||0,vz:p.vz||0,
     gun: p.guns[p.slot], ground:p.ground, vy:p.vy, aim:!!p.input.aim, sprint:!!p.input.sprint, reloadAt:p.reloadAt
   };
 }
@@ -495,10 +535,15 @@ const app = http.createServer((req, res) => {
     );
   }
 
+  if(pathname==='/character-config.js'){
+    const code=fs.readFileSync(path.join(__dirname,'character-config.js'),'utf8').replace('module.exports = { CHARACTER_SCALE };','export { CHARACTER_SCALE };');
+    res.writeHead(200,{'Content-Type':'text/javascript','Cache-Control':'no-store'});return res.end(code);
+  }
   if(pathname==='/map-collision.js'){
     const code=fs.readFileSync(path.join(__dirname,'map-collision.cjs'),'utf8')
       .replace("const THREE=require('three');","import * as THREE from '/three.module.js';")
-      .replace('module.exports={MapCollision};','export {MapCollision};');
+      .replace("const {CHARACTER_SCALE}=require('./character-config.js');","import {CHARACTER_SCALE} from '/character-config.js';")
+      .replace('module.exports={MapCollision,bodyShape};','export {MapCollision,bodyShape};');
     res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(code);
   }
   const routes = {
@@ -509,6 +554,8 @@ const app = http.createServer((req, res) => {
     '/addons/utils/SkeletonUtils.js':['node_modules/three/examples/jsm/utils/SkeletonUtils.js','text/javascript'],
     "/": ["index.html", "text/html"],
     "/index.html": ["index.html", "text/html"],
+    '/combat-visuals.js':['combat-visuals.mjs','text/javascript'],
+    '/combat.css':['combat.css','text/css'],
     "/district.css": ["district.css", "text/css"],
     "/three.module.js": [
       "node_modules/three/build/three.module.js", "text/javascript"
@@ -600,10 +647,12 @@ wss.on("connection", ws => {
     if (!p) return;
 
     if (m.type === "input") {
+      p.inputSeq=clamp(Math.floor(finite(m.seq)),0,1e9);
       p.input = {
         forward: !!m.forward, back: !!m.back,
         left: !!m.left, right: !!m.right,
         sprint: !!m.sprint, jump: !!m.jump,
+        crouch:!!m.crouch,prone:!!m.prone,slide:!!m.slide,
         fire: !!m.fire, aim: !!m.aim
       };
       p.yaw = finite(m.yaw, p.yaw) % (Math.PI * 2);
@@ -614,12 +663,7 @@ wss.on("connection", ws => {
     if (m.type === "start" && id === host && phase !== "playing")
       startRound();
 
-    if (m.type === "loadout") {
-      p.loadout = cleanLoadout(m.loadout);
-      p.grenadeLoadout = cleanGrenades(m.grenades);
-      if (SKINS[m.skin]) p.skin = m.skin;
-      if (phase !== "playing") spawn(p, now);
-    }
+    if (m.type === "loadout") changeLoadout(p,m,now);
 
     if (phase !== "playing" || p.hp <= 0) return;
 
@@ -670,6 +714,7 @@ setInterval(() => {
 
   if (phase === "playing") {
     for (const p of players.values()) {
+      refreshEquipment(p,now);
       if (p.hp <= 0) {
         if (now >= p.aliveAt) spawn(p, now);
         continue;
@@ -747,7 +792,8 @@ for(const g of grenades) {
         slot: p.slot, guns: p.guns,
         ammo: p.ammo, reloadAt: p.reloadAt,
         grenades: p.grenades,
-        grenadeLoadout: p.grenadeLoadout
+        grenadeLoadout: p.grenadeLoadout,gearReadyAt:p.gearReadyAt,inputSeq:p.inputSeq||0,
+        motion:{motionTime:p.motionTime,slideUntil:p.slideUntil,slideReadyAt:p.slideReadyAt,jumpUntil:p.jumpUntil,jumpHeld:p.jumpHeld,crouchHeld:p.crouchHeld,lastGroundAt:p.lastGroundAt}
       }
     });
   }
@@ -787,7 +833,7 @@ function groundAt(x,z) {
   let floor=0;
 
   for(const b of BLOCKS)
-    if(overlaps(x,z,.34,b)&&b.y+b.h<=.3)
+    if(overlaps(x,z,.34*CHARACTER_SCALE,b)&&b.y+b.h<=.3)
       floor=Math.max(floor,b.y+b.h);
 
   return floor;
@@ -803,20 +849,14 @@ function projectileBlocked(x,y,z,r=.12) {
 }
 
 function muzzleRay(p,yaw,pitch,o,now) {
-  const eye={x:p.x,y:p.y+1.55,z:p.z};
+  const eye=playerEye(p);
   const d=direction(yaw,pitch);
   let length=wallDistance(eye,d);
 
   for(const q of players.values()) {
     if(q===p||q.hp<=0||q.shield>now) continue;
 
-    length=Math.min(length,
-      rayBox(eye,d,
-        {x:q.x-.32,y:q.y+.05,z:q.z-.32},
-        {x:q.x+.32,y:q.y+1.32,z:q.z+.32}
-      ),
-      raySphere(eye,d,{x:q.x,y:q.y+1.52,z:q.z},.26)
-    );
+    const hit=playerHit(q,eye,d);length=Math.min(length,hit.body,hit.head);
   }
 
   const x=eye.x+d.x*length-o.x;
@@ -829,9 +869,9 @@ function muzzleRay(p,yaw,pitch,o,now) {
 
 function spawnSafety(s,enemies) {
  if(!enemies.length)return 100;
- const o={x:s[0],y:groundAt(s[0],s[1])+1.55,z:s[1]};
+ const o={x:s[0],y:groundAt(s[0],s[1])+1.55*CHARACTER_SCALE,z:s[1]};
  return Math.min(...enemies.map(q=>{
-   const x=q.x-o.x,y=q.y+1.55-o.y,z=q.z-o.z,d=Math.hypot(x,y,z)||.01;
+   const x=q.x-o.x,y=playerEye(q).y-o.y,z=q.z-o.z,d=Math.hypot(x,y,z)||.01;
    return d+(wallDistance(o,{x:x/d,y:y/d,z:z/d})<d?25:0);
  }));
 }

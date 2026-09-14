@@ -1,4 +1,5 @@
 'use strict';
+const {CHARACTER_SCALE}=require('../character-config.js');
 process.env.WORLD_MAP='mill';
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
@@ -22,14 +23,14 @@ test('Both interior stairwells climb continuously to upper floor',()=>{for(const
 test('Both exterior stairways reach the roof landing',()=>{for(const z of [-19,19]){const p=player('a',13.1,0,z-10.3);p.yaw=-Math.PI/2;p.input.forward=true;walk(p,2.88);assert.ok(p.y>=7.39,JSON.stringify(p));p.yaw=Math.PI;walk(p,.55);assert.ok(p.y>=7.39,JSON.stringify(p));}});
 test('Balcony doorway is open and edge railing blocks falling straight through',()=>{const p=player('a',26,3.8,25.5);p.yaw=Math.PI;p.input.forward=true;walk(p,.6);assert.ok(p.z>27.5);walk(p,1);assert.ok(p.z<29.5);});
 test('Walls stop horizontal movement',()=>{const p=player('a',42,0,0);p.yaw=-Math.PI/2;p.input.forward=true;walk(p,1);assert.ok(p.x<42.5);});
-test('Jump hits ceilings without penetrating the upper floor',()=>{const p=player('a',26,.2,23);p.input.jump=true;let max=0;for(let n=0;n<60;n++){e.move(p,1/60);max=Math.max(max,p.y)}assert.ok(max+1.72<=3.601);});
+test('Jump hits ceilings without penetrating the upper floor',()=>{const p=player('a',26,.2,23);p.input.jump=true;let max=0;for(let n=0;n<60;n++){e.move(p,1/60);max=Math.max(max,p.y)}assert.ok(max+1.72*CHARACTER_SCALE<=3.601);});
 test('Solid walls and roof stop bullet rays',()=>{assert.ok(e.wallDistance({x:0,y:1.5,z:38},{x:0,y:0,z:1})<2);assert.ok(e.wallDistance({x:26,y:4,z:23},{x:0,y:1,z:0})<3.3);});
 test('Rays pass through actual window openings',()=>{assert.ok(e.wallDistance({x:31.8,y:2,z:22},{x:-1,y:0,z:0})>1);});
 test('Server shooting damages a player in clear sight and consumes ammo',()=>{reset();const a=player('a',3,0,20),b=player('b',3,0,14);a.input.aim=true;e.players.set('a',a);e.players.set('b',b);client('a');client('b');e.shoot(a,10000);assert.ok(b.hp<100);assert.equal(a.ammo[0],29);});
 test('Solid cover prevents damage to players behind it',()=>{reset();const a=player('a',10,0,13),b=player('b',10,0,6);a.pitch=-.06;a.input.aim=true;e.players.set('a',a);e.players.set('b',b);client('a');client('b');for(let n=0;n<20;n++)e.shoot(a,10000+n*200);assert.equal(b.hp,100);});
 test('Spawn shields prevent damage and firing clears own shield',()=>{reset();const a=player('a',3,0,20),b=player('b',3,0,14);a.shield=b.shield=20000;e.players.set('a',a);e.players.set('b',b);client('a');client('b');e.shoot(a,10000);assert.equal(b.hp,100);assert.equal(a.shield,0);});
 test('Fire rate and reload prevent extra shots',()=>{reset();const a=player('a',3,0,20);e.players.set('a',a);client('a');e.shoot(a,10000);e.shoot(a,10001);assert.equal(a.ammo[0],29);e.reload(a,10100);assert.ok(a.reloadAt>10100);e.shoot(a,10300);assert.equal(a.ammo[0],29);});
-test('Blocked muzzle returns feedback without silently consuming ammo',()=>{reset();const a=player('a',42.3,0,0);a.yaw=-Math.PI/2;e.players.set('a',a);const messages=client('a');e.shoot(a,10000);assert.equal(a.ammo[0],30);assert.ok(messages.some(m=>m.kind==='obstructed'));});
+test('Blocked muzzle returns feedback without silently consuming ammo',()=>{reset();const a=player('a',42.7-.45*CHARACTER_SCALE+.01,0,0);a.yaw=-Math.PI/2;e.players.set('a',a);const messages=client('a');e.shoot(a,10000);assert.equal(a.ammo[0],30);assert.ok(messages.some(m=>m.kind==='obstructed'));});
 test('Grenade inventory only allows one throw per slot',()=>{reset();const a=player('a');const before=e.getGrenades().length;e.throwGrenade(a,0,10000);e.throwGrenade(a,0,10000);assert.equal(e.getGrenades().length,before+1);assert.equal(a.grenades[0],false);});
 test('Grenades collide with ground and architecture',()=>{assert.ok(e.projectileBlocked(0,-.05,20));assert.ok(e.projectileBlocked(43,1,0));assert.equal(e.projectileBlocked(3,2,20),false);});
 test('Flashbang checks line of sight, distance and facing',()=>{reset();const a=player('a',3,0,20),b=player('b',3,0,20),far=player('far',3,0,-20);b.yaw=Math.PI;for(const p of [a,b,far]){e.players.set(p.id,p);client(p.id)}e.detonate({kind:'flash',x:3,y:1.55,z:17},10000);assert.ok(a.flashUntil>b.flashUntil);assert.equal(far.flashUntil,0);const blocked=player('c',30,0,24);e.players.clear();e.players.set('c',blocked);client('c');e.detonate({kind:'flash',x:33,y:1.55,z:24},10000);assert.equal(blocked.flashUntil,0);});

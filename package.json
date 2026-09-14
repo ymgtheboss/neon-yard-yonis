@@ -1,8 +1,8 @@
 {
   "name": "neon-yard-mill-district",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
-  "description": "A multiplayer browser arena with the optimized Subzero map.",
+  "description": "Subzero multiplayer arena with ten weapons, articulated operators and stance-based movement.",
   "scripts": {
     "start": "node server.cjs",
     "test": "node tests/run.cjs",
