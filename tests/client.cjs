@@ -26,7 +26,7 @@ els.get('reloadTrack').append(new Element());
 const document={body:new Element('body'),head:new Element('head'),createElement:t=>new Element(t),getElementById:id=>els.get(id),addEventListener(){},exitPointerLock(){},pointerLockElement:null};
 class Renderer{constructor(){this.domElement=new Element('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>4};this.info={render:{calls:0}}}setSize(){}setPixelRatio(v){this.pixelRatio=v}render(scene,camera){scene.updateMatrixWorld();camera.updateMatrixWorld()}clearDepth(){}}
 let time=1000;const local=new Map();const intervals=[];
-const context={...require('../combat-visuals.mjs'),URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
+const context={...require('../combat-visuals.mjs'),URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,WORLD:world,MAP_CATALOG:require('../map-catalog.cjs').catalog,MAP_EPOCH:0,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
 context.window.document=document;
 vm.createContext(context);
 const server=fs.readFileSync(path.join(__dirname,'..','server.cjs'),'utf8');
@@ -74,3 +74,40 @@ test('Every weapon schedules a distinct layered audio signature and releases voi
  run('audioCtx=audioDouble');const signatures=new Set();for(const id of Object.keys(context.WEAPONS)){frequencies.length=0;run(`sound('shot',null,1,'${id}')`);assert.ok(sources.length>=4);signatures.add(frequencies.join(','));for(const source of sources.splice(0))source.onended();assert.equal(run('audioVoices'),0);}assert.equal(signatures.size,10);run('audioCtx=undefined');
 });
 console.log('4 additional presentation checks passed.');
+test('Aiming shows the proper reticle, firing adds recoil and sparks, then recoil recovers',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;aim=true;buildGun('rifle');pitch=0;recoilPitch=0;recoilYaw=0;");
+ time+=100;run(`frame(${time})`);assert.ok(els.get('crosshair').classList.contains('hidden'));assert.ok(els.get('scope').classList.contains('hidden'));
+ run("onEvent({kind:'shot',id:'local',gun:'rifle',origin:{x:3,y:1,z:19},ends:[]})");assert.ok(run('pitch>0&&recoil>0'));assert.equal(run('muzzleSparks.length'),4);const shotPitch=run('pitch');
+ time+=25;run(`upgradeFrame(.016,${time})`);assert.ok(run('muzzle.visible'));assert.ok(run('viewMuzzleLight.intensity>0'));
+ for(let n=0;n<100;n++){time+=16;run(`frame(${time})`);}assert.ok(run('Math.abs(pitch)')<shotPitch*.05);assert.equal(run('muzzleSparks.length'),0);
+ run("state.self.guns[0]='sniper'");time+=16;run(`frame(${time})`);assert.ok(!els.get('scope').classList.contains('hidden'));assert.ok(run('!gunRoot.visible'));run('aim=false;document.pointerLockElement=null;clearTransientWorld()');
+});
+
+test('Reload animations return both hands and magazines to rest for every weapon',()=>{
+ setState();run('aim=false');
+ for(const id of Object.keys(context.WEAPONS)){
+  run(`state.self.guns[0]='${id}';buildGun('${id}');`);
+  for(const progress of [0,.16,.35,.55,.72,.82,.97]){
+   run(`state.self.reloadAt=serverNow()+WEAPONS['${id}'].reload*1000*(1-${progress});upgradeFrame(.016,performance.now());`);
+   assert.ok(run('gunRoot.userData.leftHand.position.toArray().every(Number.isFinite)'));
+  }
+  run('state.self.reloadAt=0;upgradeFrame(.016,performance.now()+2000)');
+  assert.ok(run('gunRoot.userData.magazine.position.distanceTo(gunRoot.userData.magazineHome)<.0001'));
+  assert.ok(run('gunRoot.userData.rightHand.position.distanceTo(gunRoot.userData.rightHandHome)<.0001'));
+  assert.equal(run('gunRoot.userData.reloadRound.visible'),false);
+ }
+});
+test('Headshot and directional feedback clear on disconnect',()=>{
+ setState();run("onEvent({kind:'hit',head:true,amount:30,kill:true,victim:'Remote'});onEvent({kind:'hurt',amount:20,source:{x:8,z:20}})");
+ assert.equal(els.get('hitConfirm').textContent,'HEADSHOT · 30 DMG');assert.ok(els.get('killConfirm').textContent.includes('Remote'));
+ assert.ok(run('damageBearing.x===8'));run('clearTransientWorld()');assert.equal(run('damageBearing'),null);assert.equal(run('killConfirmUntil'),0);
+});
+
+test('Results use the frozen winner and preserve vote buttons during updates',()=>{
+ setState();run("state.phase='ended';state.results=state.players.map(p=>({...p}));state.results[1].kills=4;state.players[0].kills=99;state.mapVotes={subzero:0,village:0};nextRosterRefresh=0;updateInterface()");
+ assert.equal(els.get('winnerName').textContent,'Remote');
+ const button=els.get('voteChoices').firstElementChild;assert.equal(els.get('voteChoices').children.length,2);
+ run("state.mapVotes.subzero=1;state.myVote='subzero';nextRosterRefresh=0;updateInterface()");
+ assert.equal(els.get('voteChoices').firstElementChild,button);assert.ok(button.textContent.includes('1 votes'));assert.equal(button.attributes['aria-pressed'],'true');
+ run('clearTransientWorld()');
+});

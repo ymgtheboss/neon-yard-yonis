@@ -1,0 +1,291 @@
+{
+  "name": "Bellhaven",
+  "boundsArea": 14400,
+  "subzeroBoundsArea": 7056,
+  "boundsAreaRatio": 2.0408163265306123,
+  "supportedLowerLevelCells": 13007,
+  "renderTriangles": 427148,
+  "collisionTriangles": 55680,
+  "drawBatches": 381,
+  "textureCount": 21,
+  "sourceModels": [
+    "Wall_Plaster_Straight",
+    "Wall_UnevenBrick_Straight",
+    "Wall_Plaster_Window_Wide_Flat",
+    "Wall_UnevenBrick_Window_Wide_Flat",
+    "Wall_Plaster_Door_Round",
+    "Door_1_Round",
+    "DoorFrame_Round_WoodDark",
+    "Wall_Arch",
+    "Roof_RoundTiles_8x14",
+    "Roof_RoundTiles_6x10",
+    "Roof_Tower_RoundTiles",
+    "Roof_Front_Brick8",
+    "Roof_Front_Brick6",
+    "Roof_Front_Brick4",
+    "Floor_UnevenBrick",
+    "Floor_Brick",
+    "Floor_WoodDark",
+    "Prop_Chimney",
+    "Prop_Chimney2",
+    "Prop_Crate",
+    "Prop_Wagon",
+    "Prop_Vine1",
+    "Prop_Vine2",
+    "Prop_Vine4",
+    "Prop_WoodenFence_Single",
+    "WindowShutters_Wide_Flat_Open",
+    "WindowShutters_Wide_Flat_Closed",
+    "Balcony_Cross_Straight",
+    "Stairs_Exterior_Straight",
+    "Prop_ExteriorBorder_Straight1",
+    "Prop_Support"
+  ],
+  "placements": 2741,
+  "buildings": [
+    {
+      "x": -48,
+      "z": -45,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": -48,
+      "z": -16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": -48,
+      "z": 16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": -48,
+      "z": 45,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": -20,
+      "z": -45,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": -20,
+      "z": -16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": true
+    },
+    {
+      "x": -20,
+      "z": 16,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": -20,
+      "z": 45,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 20,
+      "z": -45,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 20,
+      "z": -16,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": 20,
+      "z": 16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": true
+    },
+    {
+      "x": 20,
+      "z": 45,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 48,
+      "z": -45,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": 48,
+      "z": -16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 48,
+      "z": 16,
+      "w": 18,
+      "d": 22,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 48,
+      "z": 45,
+      "w": 18,
+      "d": 22,
+      "floors": 2,
+      "open": false
+    },
+    {
+      "x": 0,
+      "z": -43,
+      "w": 6,
+      "d": 10,
+      "floors": 1,
+      "open": false
+    },
+    {
+      "x": 0,
+      "z": 43,
+      "w": 6,
+      "d": 10,
+      "floors": 1,
+      "open": false
+    }
+  ],
+  "ramps": [
+    {
+      "x": -9,
+      "z": -4,
+      "heading": 0,
+      "run": 6,
+      "rise": 3
+    },
+    {
+      "x": 9,
+      "z": 4,
+      "heading": 3.141592653589793,
+      "run": 6,
+      "rise": 3
+    }
+  ],
+  "spawns": [
+    [
+      -34,
+      -54,
+      3.774758283725532e-15
+    ],
+    [
+      34,
+      54,
+      -2.6645352591003757e-15
+    ],
+    [
+      -34,
+      54,
+      -3.1086244689504383e-15
+    ],
+    [
+      34,
+      -54,
+      3.552713678800501e-15
+    ],
+    [
+      -8,
+      -54,
+      3.552713678800501e-15
+    ],
+    [
+      8,
+      54,
+      -2.6645352591003757e-15
+    ],
+    [
+      -54,
+      -31,
+      2.220446049250313e-15
+    ],
+    [
+      54,
+      31,
+      -1.3322676295501878e-15
+    ],
+    [
+      -34,
+      -30,
+      2.220446049250313e-15
+    ],
+    [
+      34,
+      30,
+      -1.3322676295501878e-15
+    ],
+    [
+      -34,
+      0,
+      2.220446049250313e-16
+    ],
+    [
+      34,
+      0,
+      2.220446049250313e-16
+    ],
+    [
+      -8,
+      30,
+      -1.3322676295501878e-15
+    ],
+    [
+      8,
+      -30,
+      1.9984014443252818e-15
+    ],
+    [
+      -8,
+      -22,
+      1.5543122344752192e-15
+    ],
+    [
+      8,
+      22,
+      -8.881784197001252e-16
+    ]
+  ],
+  "glbBytes": 30098448,
+  "gzipBytes": 7551292
+}

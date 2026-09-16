@@ -1,0 +1,201 @@
+{
+  "weapons": {
+    "pistol": {
+      "source": "glock-17.glb",
+      "sourceBytes": 432768,
+      "bytes": 254844,
+      "gzipBytes": 63344,
+      "meshes": 12,
+      "tip": -0.21760000000000002,
+      "length": 0.32,
+      "sightHeight": 0.115,
+      "credits": {
+        "author": "5Nikitos5 (https://sketchfab.com/5Nikitos5)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/glock-17-aeb171380b2b490c80aa04b4ee1a9366",
+        "title": "Glock-17"
+      },
+      "sourceAnimations": [
+        "Scene"
+      ]
+    },
+    "rifle": {
+      "source": "low-poly_ak-15_k.glb",
+      "sourceBytes": 1935652,
+      "bytes": 1670800,
+      "gzipBytes": 470546,
+      "meshes": 7,
+      "tip": -0.646,
+      "length": 0.95,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "D_U (https://sketchfab.com/DU1701)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/low-poly-ak-15-k-68725380dd654391bb6b751e888e2c44",
+        "title": "low-poly AK-15 K"
+      },
+      "sourceAnimations": []
+    },
+    "shotgun": {
+      "source": "mossberg_500_low_poly.glb",
+      "sourceBytes": 3663592,
+      "bytes": 614992,
+      "gzipBytes": 583944,
+      "meshes": 2,
+      "tip": -0.7344,
+      "length": 1.08,
+      "sightHeight": 0.13,
+      "credits": {
+        "author": "Léonard_Doye Alias Leoskateman (https://sketchfab.com/leoskateman)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/mossberg-500-low-poly-53a44a7abb694c47a7a1b70fc589da4e",
+        "title": "Mossberg 500 Low Poly"
+      },
+      "sourceAnimations": []
+    },
+    "sniper": {
+      "source": "rifle__awp_weapon_model_cs2.glb",
+      "sourceBytes": 6969816,
+      "bytes": 1988912,
+      "gzipBytes": 1399242,
+      "meshes": 3,
+      "tip": -0.8296,
+      "length": 1.22,
+      "sightHeight": 0.0795,
+      "credits": {
+        "author": "6lucius (https://sketchfab.com/6lucius)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/rifle-awp-weapon-model-cs2-23ad3d7fb46b40e59cab7937654e2691",
+        "title": "RIFLE | AWP Weapon Model (CS2)"
+      },
+      "sourceAnimations": [
+        "dropped",
+        "firstperson_draw",
+        "firstperson_idle",
+        "firstperson_lookat01_end",
+        "firstperson_lookat01_loop",
+        "firstperson_lookat01_start",
+        "firstperson_lookat01",
+        "firstperson_reload",
+        "firstperson_shoot1_additive",
+        "firstperson_shoot1",
+        "holstered",
+        "inventory_icon",
+        "inventory_inspect",
+        "sh_crouch_rifl_deploy",
+        "sh_rifl_catch",
+        "sh_rifl_deploy_02",
+        "sh_rifl_deploy_03",
+        "sh_rifl_deploy",
+        "sh_snip_crouch_firing_additive",
+        "sh_snip_firing_additive",
+        "sh_snip_stand_reload",
+        "tools_preview"
+      ]
+    },
+    "revolver": {
+      "source": "old_colt_python.glb",
+      "sourceBytes": 3878840,
+      "bytes": 806460,
+      "gzipBytes": 767034,
+      "meshes": 2,
+      "tip": -0.26520000000000005,
+      "length": 0.39,
+      "sightHeight": 0.115,
+      "credits": {
+        "author": "AWS_3D (https://sketchfab.com/fellipeandrade201)",
+        "license": "CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)",
+        "source": "https://sketchfab.com/3d-models/old-colt-python-63cf364df4a2460e9384272c563b16b0",
+        "title": "old colt python"
+      },
+      "sourceAnimations": []
+    },
+    "lmg": {
+      "source": "m249_low.glb",
+      "sourceBytes": 4615624,
+      "bytes": 1134100,
+      "gzipBytes": 908906,
+      "meshes": 2,
+      "tip": -0.7616000000000002,
+      "length": 1.12,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "Runscript (https://sketchfab.com/Runscript)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/m249-low-a4ebe4defbd341c2afef191e05a3e6cf",
+        "title": "M249 Low"
+      },
+      "sourceAnimations": []
+    },
+    "dmr": {
+      "source": "low-poly_m14.glb",
+      "sourceBytes": 1104756,
+      "bytes": 659996,
+      "gzipBytes": 309206,
+      "meshes": 11,
+      "tip": -0.7616000000000002,
+      "length": 1.12,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "notcplkerry (https://sketchfab.com/notcplkerry)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/low-poly-m14-97d26ba96e4a4a06a80a163314ffc745",
+        "title": "Low-Poly M14"
+      },
+      "sourceAnimations": [
+        "Animation"
+      ]
+    },
+    "carbine": {
+      "source": "colt_m4a1_carbine.glb",
+      "sourceBytes": 14146284,
+      "bytes": 4208864,
+      "gzipBytes": 3451270,
+      "meshes": 4,
+      "tip": -0.646,
+      "length": 0.95,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "8sianDude (https://sketchfab.com/haoliu95)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/colt-m4a1-carbine-fa4a73faf4234e5db4066335074a7655",
+        "title": "Colt M4A1 Carbine"
+      },
+      "sourceAnimations": []
+    },
+    "autoshot": {
+      "source": "aa-12_redesign.glb",
+      "sourceBytes": 2145788,
+      "bytes": 1801712,
+      "gzipBytes": 967332,
+      "meshes": 17,
+      "tip": -0.6732,
+      "length": 0.99,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "Naudaff3D (https://sketchfab.com/Naudaff3D)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/aa-12-redesign-c68a127798084ca7b302d6066bc23a25",
+        "title": "AA-12 Redesign"
+      },
+      "sourceAnimations": []
+    },
+    "smg": {
+      "source": "mp5.glb",
+      "sourceBytes": 475404,
+      "bytes": 240644,
+      "gzipBytes": 195602,
+      "meshes": 2,
+      "tip": -0.4692,
+      "length": 0.69,
+      "sightHeight": 0.17,
+      "credits": {
+        "author": "Long Nguyễn (https://sketchfab.com/LongNguyen89)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/mp5-fa9b8914fda34acb9a54fa64e99d5608",
+        "title": "Mp5"
+      },
+      "sourceAnimations": []
+    }
+  }
+}

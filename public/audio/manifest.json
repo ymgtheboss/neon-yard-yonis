@@ -1,0 +1,52 @@
+{
+  "pistol": {
+    "source": "Walther PPQ/X_39P.wav",
+    "trimStart": 1.4029,
+    "duration": 0.85
+  },
+  "rifle": {
+    "source": "AK-47/C_28P.wav",
+    "trimStart": 0.6072,
+    "duration": 1.05
+  },
+  "shotgun": {
+    "source": "Mossberg/N_30P.wav",
+    "trimStart": 1.6928,
+    "duration": 1.4
+  },
+  "sniper": {
+    "source": "Tikka/W_29P.wav",
+    "trimStart": 0.5733,
+    "duration": 1.7
+  },
+  "revolver": {
+    "source": "Smith & Wesson 642/V_27P.wav",
+    "trimStart": 0.8014,
+    "duration": 1.25
+  },
+  "lmg": {
+    "source": "AK-47/C_31P.wav",
+    "trimStart": 0.3342,
+    "duration": 1.1
+  },
+  "dmr": {
+    "source": "SKS/U_14P.wav",
+    "trimStart": 3.573,
+    "duration": 1.25
+  },
+  "carbine": {
+    "source": "AR-15/D_32P.wav",
+    "trimStart": 0.6997,
+    "duration": 1.0
+  },
+  "autoshot": {
+    "source": "Nova/O_21P.wav",
+    "trimStart": 0.4272,
+    "duration": 1.25
+  },
+  "smg": {
+    "source": "Carl Gustav M45/G_31P.wav",
+    "trimStart": 0.3063,
+    "duration": 0.8
+  }
+}

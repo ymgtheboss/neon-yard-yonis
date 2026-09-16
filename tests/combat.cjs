@@ -5,7 +5,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const root=path.join(__dirname,'..'),req=createRequire(path.join(root,'server.cjs'));
 const fakeServer={on(){return this},listen(){return this}};
 const ctx={require:n=>n==='http'?{createServer:()=>fakeServer}:n==='ws'?{WebSocketServer:class extends EventEmitter{},WebSocket:{OPEN:1}}:req(n),console,process:{env:{},exit(){throw Error('Unexpected exit')}},__dirname:root,setInterval(){},Date,Math};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'server.cjs'),'utf8')+'\nglobalThis.e={WEAPONS,SKINS,players,clients,spawn,shoot,startRound,cleanGrenades,throwGrenade,refreshEquipment,detonate,changeLoadout,playerHit,playerEye,publicPlayer,getGrenades:()=>grenades};',ctx);const e=ctx.e;
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'server.cjs'),'utf8')+'\nglobalThis.e={WEAPONS,SKINS,players,clients,spawn,shoot,applyDamage,startRound,cleanGrenades,throwGrenade,refreshEquipment,detonate,changeLoadout,playerHit,playerEye,publicPlayer,getGrenades:()=>grenades};',ctx);const e=ctx.e;
 function p(id,x=3,z=20){return {id,name:id,skin:'cyan',x,y:0,z,yaw:0,pitch:0,vy:0,ground:true,hp:100,shield:0,input:{aim:true},loadout:['rifle','pistol'],grenadeLoadout:['frag','medkit'],guns:['rifle','pistol'],slot:0,ammo:[30,12],reloadAt:0,nextShot:0,kills:0,deaths:0,damage:0,grenades:[true,true],streak:0,flashUntil:0};}
 function reset(){e.players.clear();e.clients.clear();}
 function add(p){const messages=[];e.players.set(p.id,p);e.clients.set(p.id,{readyState:1,send:s=>messages.push(JSON.parse(s))});return messages;}
@@ -24,4 +24,18 @@ test('Crouch can enter low cover and releasing crouch cannot stand into the ceil
 test('Prone uses a lower, wider collision volume and moves more slowly',()=>{const a=p('a',6,5);a.input={prone:true,forward:true};step(a,60);assert.equal(a.stance,'prone');assert.ok(a.z>3&&a.z<5);assert.equal(bodyShape(a).height,.52*CHARACTER_SCALE);a.input={};step(a,2);assert.equal(a.stance,'stand');});
 test('Sprint-to-slide boosts momentum then expires, with no immediate repeated boost',()=>{const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,40);a.input.slide=true;step(a,1);assert.equal(a.stance,'slide');assert.ok(Math.hypot(a.vx,a.vz)>10);step(a,55);assert.equal(a.stance,'stand');a.input.slide=false;step(a,1);a.input.slide=true;step(a,1);assert.notEqual(a.stance,'slide');});
 test('Jump is buffered, follows a smooth arc and does not repeatedly trigger while held',()=>{const a=p('a',6,5);a.input={jump:true};let takeoffs=0,max=0,last=true;for(let i=0;i<180;i++){collision.move(a,1/60);if(last&&!a.ground)takeoffs++;last=a.ground;max=Math.max(max,a.y);}assert.equal(takeoffs,1);assert.ok(max>1&&max<1.6);assert.ok(a.ground);});
+test('Airborne release preserves momentum and grounded release stops responsively',()=>{const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,30);a.input.jump=true;step(a,1);const speed=Math.hypot(a.vx,a.vz);a.input={};step(a,12);assert.ok(!a.ground);assert.ok(Math.hypot(a.vx,a.vz)>speed*.9);step(a,100);assert.ok(a.ground);assert.ok(Math.hypot(a.vx,a.vz)<.01);});
+test('Direction reversal responds quickly without exceeding sprint speed',()=>{const a=p('a',6,10);a.input={forward:true};step(a,30);a.input={back:true};step(a,8);assert.ok(a.vz>0);assert.ok(Math.hypot(a.vx,a.vz)<=6.01);});
+
+
+test('Confirmed hit feedback reports capped damage, source direction and headshot kills once',()=>{
+ reset();const a=p('a'),b=p('b',3,14),am=add(a),bm=add(b);b.hp=30;
+ e.applyDamage(a,b,90,10000,'sniper',true);
+ assert.equal(a.headshots,1);assert.equal(a.damage,30);assert.equal(a.kills,1);
+ const hit=am.find(m=>m.kind==='hit');assert.equal(hit.amount,30);assert.equal(hit.head,true);assert.equal(hit.kill,true);assert.equal(hit.victim,'b');
+ assert.deepEqual(bm.find(m=>m.kind==='hurt').source,{x:a.x,z:a.z});
+ e.applyDamage(a,b,90,10001,'sniper',true);assert.equal(a.headshots,1);
+ e.startRound();assert.equal(a.headshots,0);assert.equal(e.publicPlayer(a).headshots,0);
+});
+
 console.log(`${count} combat upgrade checks passed.`);

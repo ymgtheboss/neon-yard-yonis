@@ -1,3 +1,11 @@
+The starting menu now has separate **Weapons**, **Loadout**, **Skins**, and **Maps** pages. Use **Play** to return home and **Enter Arena** to join. Choose a weapon slot before selecting its weapon; equipment and your callsign live on the Loadout page. An arena selected before joining applies if you become the room host.
+
+Latest local update: [Combat presentation, recorded audio and match results](COMBAT-POLISH.md).
+
+Bellhaven and the lobby map selector are documented in [BELLHAVEN.md](BELLHAVEN.md). Subzero remains available.
+
+The imported weapon and handling update is documented in [WEAPON-UPGRADE.md](WEAPON-UPGRADE.md).
+
 # Combat Operations update
 
 The latest controls and equipment rules are in [COMBAT-UPGRADE.md](COMBAT-UPGRADE.md). Run `npm start` and refresh the game to use the new armory.

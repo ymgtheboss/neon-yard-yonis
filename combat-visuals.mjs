@@ -1,3 +1,5 @@
+import {createImportedKit} from './weapon-models.mjs';
+export {preloadWeapons,weaponLoaded,WEAPON_HANDLING} from './weapon-models.mjs';
 import * as THREE from 'three';
 import {CHARACTER_SCALE} from './character-config.js';
 export {CHARACTER_SCALE};
@@ -16,7 +18,7 @@ function tube(p,x,y,z,r,l,m=M.steel,axis='z'){const o=mesh(p,cylinder,m,x,y,z,r,
 function ball(p,x,y,z,rx,ry,rz,m){return mesh(p,sphere,m,x,y,z,rx,ry,rz);}
 function pivot(parent,x=0,y=0,z=0){const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);return g;}
 function bake(group){const groups=new Map();group.updateMatrixWorld(true);const inverse=group.matrixWorld.clone().invert();for(const o of [...group.children]){if(!o.isMesh)continue;const g=o.geometry.clone().applyMatrix4(inverse.clone().multiply(o.matrixWorld));if(!groups.has(o.material))groups.set(o.material,[]);groups.get(o.material).push(g);group.remove(o);if(![cube,cylinder,sphere,ringGeometry,openCylinder].includes(o.geometry))o.geometry.dispose();}for(const [m,geos]of groups){const g=mergeGeometries(geos);geos.forEach(v=>v.dispose());g.computeBoundingSphere();const o=new THREE.Mesh(g,m);o.castShadow=true;group.add(o);}return group;}
-export function disposeKit(root,excluded=[]){const seen=new Set(),owned=new Set();root.traverse(o=>{if(o.geometry&&!seen.has(o.geometry)&&![cube,cylinder,sphere,ringGeometry,openCylinder,...excluded].includes(o.geometry)){seen.add(o.geometry);o.geometry.dispose();}if(o.material?.userData?.owned&&!owned.has(o.material)){owned.add(o.material);o.material.dispose();}});}
+export function disposeKit(root,excluded=[]){const seen=new Set(),owned=new Set();root.traverse(o=>{if(o.geometry&&!o.geometry.userData.sharedWeapon&&!seen.has(o.geometry)&&![cube,cylinder,sphere,ringGeometry,openCylinder,...excluded].includes(o.geometry)){seen.add(o.geometry);o.geometry.dispose();}if(o.material?.userData?.owned&&!owned.has(o.material)){owned.add(o.material);o.material.dispose();}});}
 function rail(p,z,len){box(p,0,.102,z,.085,.024,len);for(let i=0;i<len/.028;i++)box(p,0,.12,z+len/2-i*.028,.098,.013,.012,M.steel);}
 function grip(p,z,m=M.rubber){box(p,0,-.15,z,.09,.21,.105,m,-.22);for(let i=0;i<6;i++)box(p,.047,-.085-i*.027,z,.005,.009,.075,M.steel);box(p,0,-.11,z-.09,.072,.017,.12);box(p,0,-.08,z-.14,.07,.065,.015);}
 function barrel(p,z,length,r=.026){tube(p,0,.025,z-length/2,r,length);tube(p,0,.025,z-length-.035,r*1.4,.07,M.dark);tube(p,0,.025,z-length-.072,r*.64,.006,M.rubber);return z-length-.085;}
@@ -46,6 +48,7 @@ const DESIGNS={
  autoshot(p,a,mag,bolt){box(p,0,.005,.035,.2,.19,.35,a);grip(p,.13);stock(p,.3);mag.position.set(0,-.19,-.045);tube(mag,0,0,0,.14,.15,M.dark,'x');tube(mag,-.08,0,0,.1,.015,a,'x');for(let i=0;i<8;i++){const t=i*Math.PI/4;box(mag,0,Math.sin(t)*.14,Math.cos(t)*.14,.16,.018,.022,M.steel);}box(bolt,.105,.045,.02,.022,.05,.12);box(p,0,.02,-.25,.18,.12,.22,M.rubber);rail(p,0,.25);tube(p,0,.025,-.43,.059,.19,M.steel);for(let i=0;i<4;i++)box(p,.06,.025,-.36-i*.04,.007,.03,.02,M.rubber);return -.54;}
 };
 export function createWeaponKit(id,color='#6ad6d2'){
+ const imported=createImportedKit(id);if(imported)return imported;
  if(!DESIGNS[id])throw Error('Unknown weapon '+id);
  const root=new THREE.Group(),staticPart=pivot(root),magazine=pivot(root,0,-.115,.09),bolt=pivot(root);
  const finish='#'+new THREE.Color(color).multiplyScalar(.48).getHexString();
@@ -97,20 +100,55 @@ export function createOperatorRig(p){
 }
 export function animateOperator(a,p,dt,now,shotAge,reloadProgress){
  const stance=p.stance||'stand',prone=stance==='prone',low=stance==='crouch'||stance==='slide',slide=stance==='slide';
- const speed=Math.hypot(p.vx||0,p.vz||0),blend=1-Math.exp(-14*dt);a.stride+=dt*speed*(prone?3.5:2.15);
- a.hips.position.y=THREE.MathUtils.lerp(a.hips.position.y,prone?.255:slide?.23:low?.29:.79,blend);
+ const speed=Math.hypot(p.vx||0,p.vz||0),blend=1-Math.exp(-14*Math.min(dt,.1));
+ const forward=-((p.vx||0)*Math.sin(p.yaw||0)+(p.vz||0)*Math.cos(p.yaw||0));
+ const lateral=(p.vx||0)*Math.cos(p.yaw||0)-(p.vz||0)*Math.sin(p.yaw||0);
+ const grounded=p.ground!==false,walk=grounded&&!slide;
+ a.gait=THREE.MathUtils.lerp(a.gait||0,walk?Math.min(1,speed/4):0,blend);
+ if(walk)a.stride+=Math.min(dt,.1)*speed*(prone?3.5:2.15);
+ if(grounded&&a.wasGround===false)a.landing=Math.min(.065,Math.abs(a.lastVy||0)*.008);
+ a.wasGround=grounded;a.lastVy=p.vy||0;a.landing=(a.landing||0)*Math.exp(-12*dt);
+ const crouchBob=prone||low?0:Math.abs(Math.sin(a.stride))*a.gait*.018;
+ a.hips.position.y=THREE.MathUtils.lerp(a.hips.position.y,(prone?.255:slide?.23:low?.29:.79)-a.landing-crouchBob,blend);
  a.hips.rotation.x=THREE.MathUtils.lerp(a.hips.rotation.x,prone?-Math.PI/2:slide?-1:0,blend);
- a.torso.rotation.x=THREE.MathUtils.lerp(a.torso.rotation.x,prone?.08:slide?0:low?.8:p.sprint?.13:0,blend);
- a.head.rotation.x=-a.hips.rotation.x-a.torso.rotation.x+p.pitch*.4;
+ const turn=prone||low?0:THREE.MathUtils.clamp(lateral*.075,-.55,.55);
+ a.hips.rotation.y=THREE.MathUtils.lerp(a.hips.rotation.y,turn,blend);
+ a.torso.rotation.y=-a.hips.rotation.y;
+ a.torso.rotation.x=THREE.MathUtils.lerp(a.torso.rotation.x,prone?.08:slide?0:low?.8:p.sprint&&!p.aim?.13:0,blend);
+ a.head.rotation.x=-a.hips.rotation.x-a.torso.rotation.x+(p.pitch||0)*.4;
+ const kick=Math.max(0,1-shotAge/140)*.09;
  for(let i=0;i<2;i++){
-  const sign=i?1:-1,swing=Math.sin(a.stride+Math.PI*i)*Math.min(.65,speed*.075);
-  a.legs[i].rotation.x=prone?swing*.17:slide?-.57:low?1.25+swing*.12:!p.ground?.25+sign*.18:swing;
-  a.knees[i].rotation.x=prone?.12:slide?.13:low?-2.5:Math.min(0,-swing)*.75;
-  a.arms[i].rotation.x=prone?2.8:.4+p.pitch*.25;
-  a.arms[i].rotation.z=i?-.2:.55;a.elbows[i].rotation.x=(prone?.2:.65)+(i===0?reloadProgress*.6:0);
+  const sign=i?1:-1,cycle=Math.sin(a.stride+Math.PI*i),swing=cycle*.62*a.gait;
+  const direction=Math.abs(forward)<.1?0:Math.sign(forward);
+  const leg=prone?swing*.17:slide?-.57:low?1.25+swing*.12:!grounded?.25+sign*.18:swing*direction;
+  a.legs[i].rotation.x=THREE.MathUtils.lerp(a.legs[i].rotation.x,leg,blend);
+  a.legs[i].rotation.z=THREE.MathUtils.lerp(a.legs[i].rotation.z,prone||low?0:cycle*a.gait*THREE.MathUtils.clamp(lateral*.07,-.3,.3),blend);
+  a.knees[i].rotation.x=THREE.MathUtils.lerp(a.knees[i].rotation.x,prone?.12:slide?.13:low?-2.5:!grounded?-.45:Math.min(0,-swing)*.9-a.landing*3,blend);
+  a.arms[i].rotation.x=THREE.MathUtils.lerp(a.arms[i].rotation.x,(prone?2.8:1.02)+(p.pitch||0)*.55+kick-(i===0?reloadProgress*.45:0),blend);
+  a.arms[i].rotation.z=THREE.MathUtils.lerp(a.arms[i].rotation.z,i?-.2:.55,blend);
+  a.elbows[i].rotation.x=THREE.MathUtils.lerp(a.elbows[i].rotation.x,(prone?.2:.65)+(i===0?reloadProgress*.6:0),blend);
  }
- a.weaponPivot.position.set(.22,prone?.5:slide?.2:.1,prone?.1:slide?.12:-.32);
- a.weaponPivot.rotation.x=p.pitch-a.hips.rotation.x-a.torso.rotation.x;a.weaponPivot.rotation.z=-reloadProgress*.45;
+ a.weaponPivot.position.lerp(new THREE.Vector3(.12,prone?.5:slide?.2:.2,(prone?.1:slide?.12:-.16)+kick*.25),blend);
+ a.weaponPivot.rotation.x=(p.pitch||0)-a.hips.rotation.x-a.torso.rotation.x-kick;
+ a.weaponPivot.rotation.z=-reloadProgress*.45;
+ // Two-bone arm posing keeps gloves on the actual weapon instead of swinging above it.
+ for(let i=0;i<2;i++){
+  a.ik ||= [null,null];
+  const v=a.ik[i] ||= Array.from({length:8},()=>new THREE.Vector3());
+  const [target,axis,bend,elbow,upper,lower,down,helper]=v;
+  const side=i?1:-1,shortGun=['pistol','revolver'].includes(p.gun||a.kit.userData.id);
+  target.set(i?.04:-.055,-.11,i?.13:shortGun?.08:-.28).multiplyScalar(.72).applyQuaternion(a.weaponPivot.quaternion).add(a.weaponPivot.position);
+  if(i===0&&reloadProgress>0){target.x-=reloadProgress*.08;target.y-=reloadProgress*.16;target.z+=reloadProgress*.12;}
+  axis.copy(target).sub(a.arms[i].position);const distance=THREE.MathUtils.clamp(axis.length(),.035,.549);axis.normalize();
+  bend.set(side*.8,-1,.35);bend.addScaledVector(axis,-bend.dot(axis)).normalize();
+  const along=(.28*.28-.27*.27+distance*distance)/(2*distance),height=Math.sqrt(Math.max(0,.28*.28-along*along));
+  elbow.copy(a.arms[i].position).addScaledVector(axis,along).addScaledVector(bend,height);
+  upper.copy(elbow).sub(a.arms[i].position).normalize();down.set(0,-1,0);
+  a.arms[i].quaternion.setFromUnitVectors(down,upper);
+  helper.copy(a.arms[i].position).addScaledVector(axis,distance);
+  lower.copy(helper).sub(elbow).normalize().applyQuaternion(a.arms[i].quaternion.clone().invert());
+  a.elbows[i].quaternion.setFromUnitVectors(down,lower);
+ }
  a.remoteFlash.visible=shotAge<65;
  a.kit.userData.bolt.position.z=a.kit.userData.boltHome.z+Math.max(0,1-shotAge/110)*.06;
 }

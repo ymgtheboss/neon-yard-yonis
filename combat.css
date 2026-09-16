@@ -15,3 +15,24 @@ button,input,select,.tag{border-radius:8px}button{background:#1c2c40;border-colo
 @media(max-width:1050px){.operator-customize{grid-template-columns:160px 1fr}.operator-customize .skins{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:600px){.operator-customize{grid-template-columns:120px 1fr;gap:10px}.operator-customize .skins{grid-template-columns:repeat(2,1fr)}.operator-customize #operatorPreview canvas{width:120px!important;height:180px!important}}
 #menu{padding-bottom:110px}#menu .footer{position:fixed;bottom:0;left:0;width:100%;box-sizing:border-box;margin:0;padding:14px max(24px,calc((100vw - 1240px)/2));background:#0b1727f5;border-top:1px solid #43607966;z-index:10;box-shadow:0 -10px 30px #07111e55}.score-table{max-height:32vh;overflow:auto;margin:12px 0 17px}.score-table table{margin:0}.score-table th{position:sticky;top:0;background:#112035;z-index:1}#board .row{padding-top:8px}
+
+/* Single-pass magnified world view with coated lens, etched reticle and eye relief. */
+#scope{background:radial-gradient(circle at center,transparent 0 32vh,#080b10 33vh);display:grid;place-items:center}
+#scope.hidden{display:none}
+#scope::before,#scope::after{display:none}
+.scope-lens{position:relative;width:64vh;height:64vh;border-radius:50%;overflow:hidden;border:5px solid #151a20;box-shadow:0 0 0 3px #566068,0 0 0 10px #101419,0 0 0 12px #303b44,inset 0 0 30px 10px #020911aa;background:linear-gradient(135deg,#a5e7f010,transparent 32%,transparent 70%,#47998312)}
+.scope-lens svg{position:absolute;inset:0;width:100%;height:100%}
+.scope-flare{position:absolute;inset:0;opacity:var(--shot-glow,0);background:radial-gradient(ellipse at 50% 110%,#fff3b8 0%,#ff9c2880 17%,transparent 48%);mix-blend-mode:screen}
+
+.map-picker{display:grid;gap:8px;margin:16px 0;font-size:12px;letter-spacing:.06em}.map-picker select{width:100%;padding:12px;background:#172b36;color:#e0efee;border:1px solid #52666e;border-radius:5px;font:inherit;letter-spacing:normal}.map-picker a{color:#81c7ba;font-size:11px}#mapLoadStatus{font-size:12px;color:#b0d8cb;min-height:18px}
+
+/* Confirmed combat feedback and after-action presentation. */
+#hitConfirm,#killConfirm{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;text-align:center;opacity:0;text-shadow:0 2px 5px #000;font-weight:800;letter-spacing:2px}
+#hitConfirm{top:calc(50% + 35px);font-size:11px;color:#ffe0a3}
+#killConfirm{bottom:24%;font-size:14px;color:#fff0ce;padding:10px 20px;border-bottom:2px solid #e6b972;background:linear-gradient(90deg,transparent,#12202cdd,transparent);transition:opacity .15s}
+#damageDirection{position:absolute;left:50%;top:50%;width:160px;height:160px;border-radius:50%;border-top:7px solid #ff8069;opacity:0;pointer-events:none;filter:drop-shadow(0 0 6px #ff4729)}
+#winnerShowcase{display:flex;align-items:center;gap:24px;margin:16px 0;background:radial-gradient(ellipse at 20% 90%,#36555b,#14212c 65%);border:1px solid #d5b77855;border-radius:12px;padding:0 20px;min-height:225px}
+#winnerShowcase.hidden{display:none}#winnerModel{width:180px;height:225px;overflow:hidden;flex-shrink:0}#winnerModel canvas{height:225px!important;width:150px!important;margin-left:15px}#winnerName{font-size:28px;margin:10px 0;color:#ffe3a8}#winnerWeapon{color:#b7c9d2;font-size:12px}
+#roundMedals{display:flex;flex-wrap:wrap;gap:8px}#roundMedals span{font-size:10px;letter-spacing:1px;background:#e1ba7620;border:1px solid #e1ba7670;border-radius:5px;padding:7px;color:#ffe0a0}
+#mapVote{padding:14px 0;margin:14px 0;border-top:1px solid #ffffff20}#voteChoices{display:flex;gap:10px;margin:10px 0}#voteChoices button{flex:1}#voteChoices .selected{border-color:#67dcc7;background:#234f50;color:#dbfff6}.round-stats{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}
+@media(max-width:600px){#winnerShowcase{gap:8px;padding:0 8px}#winnerModel{width:125px}#winnerModel canvas{margin-left:-12px}#winnerName{font-size:20px}}

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.cjs",
     "test": "node tests/run.cjs",
-    "build:map": "node scripts/build-subzero.cjs && node scripts/build-spawns.cjs"
+    "build:map": "node scripts/build-subzero.cjs && node scripts/build-spawns.cjs && node scripts/build-surface-audio.cjs"
   },
   "dependencies": {
     "three": "0.186.0",

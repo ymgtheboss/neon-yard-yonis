@@ -9,12 +9,12 @@ function bodyShape(p) {
  return {height,eye:height-.17*CHARACTER_SCALE,rx:(stance==='prone'?.78:.36)*CHARACTER_SCALE,rz:(stance==='prone'?.78:.36)*CHARACTER_SCALE};
 }
 class MapCollision {
- constructor(data){this.triangles=[];const v=new THREE.Vector3();for(let i=0;i<data.length;i+=9){const t=new THREE.Triangle(new THREE.Vector3(data[i],data[i+1],data[i+2]),new THREE.Vector3(data[i+3],data[i+4],data[i+5]),new THREE.Vector3(data[i+6],data[i+7],data[i+8]));this.triangles.push({t,b:new THREE.Box3().setFromPoints([t.a,t.b,t.c]),normal:t.getNormal(v).clone()});}this.root=this.build(this.triangles.slice());this.box=new THREE.Box3();this.point=new THREE.Vector3();this.ray=new THREE.Ray();}
+ constructor(data){this.triangles=[];const v=new THREE.Vector3();for(let i=0;i<data.length;i+=9){const t=new THREE.Triangle(new THREE.Vector3(data[i],data[i+1],data[i+2]),new THREE.Vector3(data[i+3],data[i+4],data[i+5]),new THREE.Vector3(data[i+6],data[i+7],data[i+8]));this.triangles.push({index:i/9,t,b:new THREE.Box3().setFromPoints([t.a,t.b,t.c]),normal:t.getNormal(v).clone()});}this.root=this.build(this.triangles.slice());this.box=new THREE.Box3();this.point=new THREE.Vector3();this.ray=new THREE.Ray();}
  build(items){const box=new THREE.Box3();for(const t of items)box.union(t.b);if(items.length<=12)return {box,items};const s=box.getSize(new THREE.Vector3()),axis=s.x>s.y&&s.x>s.z?'x':s.y>s.z?'y':'z';items.sort((a,b)=>(a.b.min[axis]+a.b.max[axis])-(b.b.min[axis]+b.b.max[axis]));const mid=items.length>>1;return {box,left:this.build(items.slice(0,mid)),right:this.build(items.slice(mid))};}
  intersects(box,node=this.root){if(!node.box.intersectsBox(box))return false;if(node.items)return node.items.some(a=>a.b.intersectsBox(box)&&box.intersectsTriangle(a.t));return this.intersects(box,node.left)||this.intersects(box,node.right);}
  blocked(x,y,z,r=.36*CHARACTER_SCALE,height=1.72*CHARACTER_SCALE,rz=r){this.box.min.set(x-r,y+.018,z-rz);this.box.max.set(x+r,y+height-.018,z+rz);return this.intersects(this.box);}
  projectile(x,y,z,r=.12){this.box.min.set(x-r,y-r,z-r);this.box.max.set(x+r,y+r,z+r);return this.intersects(this.box);}
- distance(o,d,max=150,walkable=false){this.ray.origin.set(o.x,o.y,o.z);this.ray.direction.set(d.x,d.y,d.z);let nearest=max;const point=this.point,ray=this.ray;const visit=node=>{if(!ray.intersectBox(node.box,point)||point.distanceTo(ray.origin)>nearest&&!node.box.containsPoint(ray.origin))return;if(node.items){for(const a of node.items){if(walkable&&a.normal.y<.6)continue;if(ray.intersectTriangle(a.t.a,a.t.b,a.t.c,false,point)){const dist=point.distanceTo(ray.origin);if(dist<nearest)nearest=dist;}}}else{visit(node.left);visit(node.right);}};visit(this.root);return nearest;}
+ distance(o,d,max=150,walkable=false){this.ray.origin.set(o.x,o.y,o.z);this.ray.direction.set(d.x,d.y,d.z);let nearest=max;this.lastTriangle=null;const point=this.point,ray=this.ray;const visit=node=>{if(!ray.intersectBox(node.box,point)||point.distanceTo(ray.origin)>nearest&&!node.box.containsPoint(ray.origin))return;if(node.items){for(const a of node.items){if(walkable&&a.normal.y<.6)continue;if(ray.intersectTriangle(a.t.a,a.t.b,a.t.c,false,point)){const dist=point.distanceTo(ray.origin);if(dist<nearest){nearest=dist;this.lastTriangle=a;}}}}else{visit(node.left);visit(node.right);}};visit(this.root);return nearest;}
  floor(x,z,top,drop=100){const dist=this.distance({x,y:top,z},{x:0,y:-1,z:0},drop,true);return dist<drop?top-dist:-Infinity;}
  support(x,z,top,drop=.6,rx=.36*CHARACTER_SCALE,rz=.36*CHARACTER_SCALE){let y=-Infinity;for(const [dx,dz]of [[0,0],[-rx,-rz],[rx,-rz],[-rx,rz],[rx,rz]])y=Math.max(y,this.floor(x+dx,z+dz,top,drop));return y;}
  move(p,dt) {
@@ -42,7 +42,7 @@ class MapCollision {
    p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
   }
   const f=Number(!!i.forward)-Number(!!i.back),s=Number(!!i.right)-Number(!!i.left),length=Math.hypot(f,s)||1;
-  const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&!i.fire?9:6;
+  const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&f>0&&!i.fire?9:6;
   const tx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed;
   const tz=(-Math.cos(p.yaw)*f-Math.sin(p.yaw)*s)/length*speed;
   const steps=Math.max(1,Math.ceil(dt/.008)),sub=dt/steps;
@@ -50,8 +50,16 @@ class MapCollision {
    if(p.stance==='slide'&&p.motionTime<(p.slideUntil||0)){
     const friction=Math.exp(-1.25*sub);p.vx*=friction;p.vz*=friction;
    } else {
-    const blend=1-Math.exp(-(p.ground?(f||s?18:24):3.8)*sub);
-    p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
+    if(p.ground){
+     const reversing=p.vx*tx+p.vz*tz<0;
+     const blend=1-Math.exp(-(f||s?(reversing?28:18):25)*sub);
+     p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
+    }else if(f||s){
+     // Air steering preserves momentum; releasing a key never brakes mid-jump.
+     const blend=1-Math.exp(-2.8*sub);
+     const airSpeed=Math.max(speed,Math.hypot(p.vx,p.vz));
+     p.vx+=(tx/speed*airSpeed-p.vx)*blend;p.vz+=(tz/speed*airSpeed-p.vz)*blend;
+    }else{p.vx*=Math.exp(-.12*sub);p.vz*=Math.exp(-.12*sub);}
    }
    for(const axis of ['x','z']){
     const velocity=axis==='x'?'vx':'vz',next=p[axis]+p[velocity]*sub;

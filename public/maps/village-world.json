@@ -1,0 +1,170 @@
+{
+  "BLOCKS": [],
+  "DECOR": [],
+  "PROPS": [],
+  "AREAS": [
+    {
+      "name": "BELL MARKET",
+      "x": 0,
+      "z": 0,
+      "w": 22,
+      "d": 64
+    },
+    {
+      "name": "NORTH GATE",
+      "x": 0,
+      "z": -45,
+      "w": 120,
+      "d": 30
+    },
+    {
+      "name": "SOUTH GATE",
+      "x": 0,
+      "z": 45,
+      "w": 120,
+      "d": 30
+    },
+    {
+      "name": "COOPER STREET",
+      "x": -35,
+      "z": 0,
+      "w": 45,
+      "d": 60
+    },
+    {
+      "name": "GARDEN WALK",
+      "x": 35,
+      "z": 0,
+      "w": 45,
+      "d": 60
+    }
+  ],
+  "SPAWNS": [
+    [
+      -34,
+      -54,
+      3.774758283725532e-15
+    ],
+    [
+      34,
+      54,
+      -2.6645352591003757e-15
+    ],
+    [
+      -34,
+      54,
+      -3.1086244689504383e-15
+    ],
+    [
+      34,
+      -54,
+      3.552713678800501e-15
+    ],
+    [
+      -8,
+      -54,
+      3.552713678800501e-15
+    ],
+    [
+      8,
+      54,
+      -2.6645352591003757e-15
+    ],
+    [
+      -54,
+      -31,
+      2.220446049250313e-15
+    ],
+    [
+      54,
+      31,
+      -1.3322676295501878e-15
+    ],
+    [
+      -34,
+      -30,
+      2.220446049250313e-15
+    ],
+    [
+      34,
+      30,
+      -1.3322676295501878e-15
+    ],
+    [
+      -34,
+      0,
+      2.220446049250313e-16
+    ],
+    [
+      34,
+      0,
+      2.220446049250313e-16
+    ],
+    [
+      -8,
+      30,
+      -1.3322676295501878e-15
+    ],
+    [
+      8,
+      -30,
+      1.9984014443252818e-15
+    ],
+    [
+      -8,
+      -22,
+      1.5543122344752192e-15
+    ],
+    [
+      8,
+      22,
+      -8.881784197001252e-16
+    ]
+  ],
+  "MAP": {
+    "id": "village",
+    "name": "Bellhaven",
+    "url": "/maps/village.glb",
+    "collisionUrl": "/maps/village-collision.bin",
+    "bounds": {
+      "minX": -60,
+      "maxX": 60,
+      "minZ": -60,
+      "maxZ": 60
+    },
+    "killY": -8,
+    "attribution": "Medieval Village MegaKit by Quaternius • CC0 • Bellhaven arena layout",
+    "source": "https://quaternius.com/packs/medievalvillagemegakit.html",
+    "sky": "#c9d9da",
+    "fogNear": 75,
+    "fogFar": 170,
+    "shadows": true,
+    "overview": "/maps/village-overview.svg",
+    "signs": [
+      {
+        "text": "BELL MARKET",
+        "x": 0,
+        "y": 2.5,
+        "z": 2.08,
+        "ry": 0,
+        "width": 3.2
+      },
+      {
+        "text": "COOPER STREET",
+        "x": -20,
+        "y": 2.5,
+        "z": -4.8,
+        "ry": 0,
+        "width": 4
+      },
+      {
+        "text": "GARDEN WALK",
+        "x": 20,
+        "y": 2.5,
+        "z": 4.8,
+        "ry": 3.141592653589793,
+        "width": 4
+      }
+    ]
+  }
+}

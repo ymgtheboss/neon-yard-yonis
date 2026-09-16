@@ -1,0 +1,21 @@
+NEON YARD — COMBAT AUDIO
+
+Recorded firearm sources: The Free Firearm Sound Library
+Ben Jaszczak, Brian Nelson, Kevin Heras, Matthew Nanney. CC0 1.0.
+https://opengameart.org/content/the-free-firearm-sound-library
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Selected single shots trimmed at attack, downmixed to mono, low-pass filtered,
+resampled to 32 kHz PCM, peak normalized and tail-faded for browser playback.
+Exact source files and trim offsets: manifest.json beside this file.
+Some in-game weapons use recordings of similar firearms, not the exact model.
+
+Footsteps (snow, wood, concrete, grass): Kenney, Impact Sounds. CC0 1.0.
+https://kenney.nl/assets/impact-sounds
+Three variations per surface, supplied as original Ogg files.
+
+Magazine and shell foley: Brian MacIntosh (BMacZero), Gun Reload Sound Effects.
+clipload2.wav and singlebullet1.wav. CC0 1.0.
+https://opengameart.org/content/gun-reload-sound-effects
+
+Additional low-volume UI tones and fallback audio are synthesized by the game.

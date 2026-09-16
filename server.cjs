@@ -13,36 +13,36 @@ const clients = new Map();
 
 const WEAPONS = {
   pistol: {
-    name: "VOLT / Pistol",
+    name: "VOLT / Glock 17",
     damage: 30, rate: 0.25, magazine: 12,
     reload: 1.15, spread: 0.012, pellets: 1,
     auto: false, color: "#ffcc66"
   },
   rifle: {
-    name: "HAVOC / Rifle",
+    name: "HAVOC / AK-15",
     damage: 24, rate: 0.105, magazine: 30,
     reload: 1.8, spread: 0.022, pellets: 1,
     auto: true, color: "#60e6de"
   },
   shotgun: {
-    name: "BREACH / Shotgun",
+    name: "BREACH / Mossberg 500",
     damage: 14, rate: 0.85, magazine: 6,
     reload: 2.1, spread: 0.085, pellets: 8,
     auto: false, color: "#ff9866"
   },
   sniper: {
-    name: "GHOST / Sniper",
+    name: "GHOST / AWP",
     damage: 80, rate: 1.2, magazine: 5,
     reload: 2.4, spread: 0.075, pellets: 1,
     auto: false, color: "#c0a0ff"
   },
-  revolver: {name:"BASILISK / Revolver",damage:55,rate:.48,magazine:6,reload:2.2,spread:.009,pellets:1,auto:false,color:"#efbd78"},
-  lmg: {name:"ATLAS / LMG",damage:25,rate:.12,magazine:70,reload:3.6,spread:.032,pellets:1,auto:true,color:"#b9cb74"},
-  dmr: {name:"KESTREL / DMR",damage:46,rate:.34,magazine:15,reload:2.05,spread:.016,pellets:1,auto:false,color:"#aabcf0"},
-  carbine: {name:"WRAITH / Carbine",damage:21,rate:.088,magazine:28,reload:1.65,spread:.02,pellets:1,auto:true,color:"#e791b4"},
-  autoshot: {name:"MAUL / Auto shotgun",damage:10,rate:.34,magazine:12,reload:2.8,spread:.105,pellets:7,auto:true,color:"#f18468"},
+  revolver: {name:"BASILISK / Colt Python",damage:55,rate:.48,magazine:6,reload:2.2,spread:.009,pellets:1,auto:false,color:"#efbd78"},
+  lmg: {name:"ATLAS / M249",damage:25,rate:.12,magazine:70,reload:3.6,spread:.032,pellets:1,auto:true,color:"#b9cb74"},
+  dmr: {name:"KESTREL / M14",damage:46,rate:.34,magazine:15,reload:2.05,spread:.016,pellets:1,auto:false,color:"#aabcf0"},
+  carbine: {name:"WRAITH / M4A1",damage:21,rate:.088,magazine:28,reload:1.65,spread:.02,pellets:1,auto:true,color:"#e791b4"},
+  autoshot: {name:"MAUL / AA-12",damage:10,rate:.34,magazine:12,reload:2.8,spread:.105,pellets:7,auto:true,color:"#f18468"},
   smg: {
-    name: "RUSH / SMG",
+    name: "RUSH / MP5",
     damage: 17, rate: 0.068, magazine: 36,
     reload: 1.5, spread: 0.038, pellets: 1,
     auto: true, color: "#9cf08c"
@@ -59,11 +59,26 @@ const SKINS = {
   obsidian:"#657088", desert:"#d1a977", woodland:"#819964", ember:"#da6744", arctic:"#bddcec", royal:"#9d80d8"
 };
 
-const { BLOCKS, DECOR, PROPS, AREAS, SPAWNS, MAP } = require('./world-data.cjs');
+let { BLOCKS, DECOR, PROPS, AREAS, SPAWNS, MAP } = require('./world-data.cjs');
 
 const {CHARACTER_SCALE}=require('./character-config.js');
 const {MapCollision,bodyShape}=require('./map-collision.cjs');
-const mapCollision=MAP?(()=>{const b=fs.readFileSync(path.join(__dirname,'public/maps/subzero-collision.bin'));return new MapCollision(new Float32Array(b.buffer,b.byteOffset,b.byteLength/4));})():null;
+const {worlds,catalog:mapCatalog}=require('./map-catalog.cjs');
+const collisionCache=new Map();
+function collisionFor(map){if(!map)return null;if(!collisionCache.has(map.id)){const b=fs.readFileSync(path.join(__dirname,'public',map.collisionUrl));collisionCache.set(map.id,new MapCollision(new Float32Array(b.buffer,b.byteOffset,b.byteLength/4)));}return collisionCache.get(map.id);}
+let mapCollision=collisionFor(MAP),mapEpoch=0;
+const mapId=()=>MAP?.id||'mill';
+function currentWorld(){return {BLOCKS,DECOR,PROPS,AREAS,MAP};}
+function changeMap(id,requester){
+ if(requester!==host||phase==='playing'||!Object.hasOwn(worlds,id))return false;
+ if(id===mapId())return true;
+ const next=worlds[id],collision=collisionFor(next.MAP);
+ ({BLOCKS,DECOR,PROPS,AREAS,SPAWNS,MAP}=next);mapCollision=collision;mapEpoch++;
+ phase='lobby';roundEnd=0;grenades=[];smokes=[];roundResults=[];mapVotes.clear();
+ for(const p of players.values()){p.readyEpoch=-1;p.input={};p.kills=p.deaths=p.damage=0;p.gearReadyAt=[0,0];spawn(p,Date.now());}
+ broadcast({type:'mapChanged',mapId:mapId(),mapEpoch,world:currentWorld()});return true;
+}
+
 
 let phase = "lobby";
 let roundEnd = 0;
@@ -71,6 +86,7 @@ let host = null;
 let grenades = [];
 let smokes = [];
 let serial = 0;
+let roundResults = [], mapVotes = new Map();
 
 function send(ws, data) {
   if (ws && ws.readyState === WebSocket.OPEN)
@@ -143,7 +159,9 @@ function spawn(p, now) {
   const options = safe.slice(0, 3);
   const s = options[Math.floor(Math.random() * options.length)].s;
 
+  if(MAP?.id==='village'){p.yaw=Math.atan2(s[0],s[1]);p.pitch=0;}
   Object.assign(p, {
+    spawnSeq:(p.spawnSeq||0)+1,
     x: s[0], y: groundAt(s[0],s[1]), ground: true, z: s[1], vy: 0,
     vx:0,vz:0,stance:'stand',motionTime:0,slideUntil:0,slideReadyAt:0,jumpHeld:false,crouchHeld:false,jumpUntil:-1,lastGroundAt:-100,
     hp: 100, aliveAt: 0, shield: now + 1500,
@@ -201,7 +219,7 @@ function reload(p, now) {
   const w = WEAPONS[p.guns[p.slot]];
   if (!p.reloadAt && p.ammo[p.slot] < w.magazine) {
     p.reloadAt = now + w.reload * 1000;
-    event({kind:'reload',id:p.id,gun:p.guns[p.slot],x:p.x,y:playerEye(p).y,z:p.z,duration:w.reload});
+    event({kind:'reload',id:p.id,gun:p.guns[p.slot],x:p.x,y:playerEye(p).y,z:p.z,duration:w.reload,reloadAt:p.reloadAt});
   }
 }
 
@@ -309,16 +327,16 @@ function playerHit(p,o,d){
  }
  const bounds=playerBounds(p);return {head,body:rayBox(o,d,bounds.lo,bounds.hi)};
 }
-function applyDamage(attacker,victim,amount,now,gun,head=false){
+function applyDamage(attacker,victim,amount,now,gun,head=false,origin=null){
  if(victim.hp<=0||victim.shield>now)return;
  const dealt=Math.min(victim.hp,Math.max(0,Math.round(amount)));
  if(attacker&&attacker!==victim)attacker.damage+=dealt;
  victim.hp-=dealt;
- if(attacker&&attacker!==victim)send(clients.get(attacker.id),{type:'event',kind:'hit',head,kill:victim.hp===0});
- send(clients.get(victim.id),{type:'event',kind:'hurt',amount:dealt});
+ if(attacker&&attacker!==victim)send(clients.get(attacker.id),{type:'event',kind:'hit',head,amount:dealt,victim:victim.name,kill:victim.hp===0});
+ send(clients.get(victim.id),{type:'event',kind:'hurt',amount:dealt,source:origin?{x:origin.x,z:origin.z}:attacker&&attacker!==victim?{x:attacker.x,z:attacker.z}:null});
  if(victim.hp===0){
   victim.deaths++;victim.aliveAt=now+RESPAWN;victim.reloadAt=0;
-  if(attacker&&attacker!==victim){attacker.kills++;attacker.streak++;attacker.bestStreak=Math.max(attacker.bestStreak||0,attacker.streak);}
+  if(attacker&&attacker!==victim){attacker.kills++;if(head)attacker.headshots=(attacker.headshots||0)+1;attacker.streak++;attacker.bestStreak=Math.max(attacker.bestStreak||0,attacker.streak);}
   event({kind:'kill',killer:attacker?.name||'Explosion',victim:victim.name,gun,head,streak:attacker?.streak||0,killerId:attacker?.id,victimId:victim.id});
  }
 }
@@ -364,7 +382,7 @@ function detonate(g, now) {
       const dx=center.x-g.x,dy=center.y-g.y,dz=center.z-g.z,dist=Math.hypot(dx,dy,dz);
       if(dist>=8)continue;
       if(dist>.01&&wallDistance(g,{x:dx/dist,y:dy/dist,z:dz/dist})<dist-.04)continue;
-      applyDamage(owner,p,110*Math.pow(1-dist/8,1.25),now,'frag');
+      applyDamage(owner,p,110*Math.pow(1-dist/8,1.25),now,'frag',false,g);
     }
     return;
   }
@@ -493,12 +511,13 @@ function move(p,dt) {
 function startRound() {
   const now = Date.now();
   phase = "playing";
+  roundResults=[];mapVotes.clear();
   roundEnd = now + ROUND;
   grenades = [];
   smokes = [];
 
   for (const p of players.values()) {
-    p.gearReadyAt=[0,0];p.shots=0;p.hits=0;p.bestStreak=0;p.kills = p.deaths = p.damage = 0;
+    p.gearReadyAt=[0,0];p.shots=0;p.hits=0;p.headshots=0;p.bestStreak=0;p.kills = p.deaths = p.damage = 0;
     spawn(p, now);
   }
 
@@ -507,11 +526,11 @@ function startRound() {
 
 function publicPlayer(p) {
   return {
-    id: p.id, name: p.name, skin: p.skin,
+    id: p.id, name: p.name, skin: p.skin, spawnSeq:p.spawnSeq||0,
     x: p.x, y: p.y, z: p.z,
     yaw: p.yaw, pitch: p.pitch,
     hp: p.hp, kills: p.kills, deaths: p.deaths,
-    damage: p.damage, streak: p.streak,bestStreak:p.bestStreak||0,accuracy:p.shots?Math.round((p.hits||0)/p.shots*100):0,
+    headshots:p.headshots||0,shots:p.shots||0,damage: p.damage, streak: p.streak,bestStreak:p.bestStreak||0,accuracy:p.shots?Math.round((p.hits||0)/p.shots*100):0,
     aliveAt: p.aliveAt, shield: p.shield,
     stance:p.stance||'stand',vx:p.vx||0,vz:p.vz||0,
     gun: p.guns[p.slot], ground:p.ground, vy:p.vy, aim:!!p.input.aim, sprint:!!p.input.sprint, reloadAt:p.reloadAt
@@ -528,6 +547,7 @@ const app = http.createServer((req, res) => {
     });
     return res.end(
       `export const MAP=${JSON.stringify(MAP)};\n` +
+      `export const WORLD=${JSON.stringify(currentWorld())};export const MAP_CATALOG=${JSON.stringify(mapCatalog)};export const MAP_EPOCH=${mapEpoch};\n` +
       `export const WEAPONS=${JSON.stringify(WEAPONS)};\n` +
       `export const SKINS=${JSON.stringify(SKINS)};\n` +
       `export const DECOR=${JSON.stringify(DECOR)};export const PROPS=${JSON.stringify(PROPS)};export const AREAS=${JSON.stringify(AREAS)};\n` +
@@ -547,7 +567,15 @@ const app = http.createServer((req, res) => {
     res.writeHead(200,{'Content-Type':'text/javascript'});return res.end(code);
   }
   const routes = {
+    '/audio/CREDITS.txt':['public/audio/CREDITS.txt','text/plain'],
+    '/audio/manifest.json':['public/audio/manifest.json','application/json'],
+    '/map-billboards.mjs':['map-billboards.mjs','text/javascript'],
+    '/maps/subzero-billboard.jpg':['public/maps/subzero-billboard.jpg','image/jpeg'],
     '/maps/subzero.glb':['public/maps/subzero.glb','model/gltf-binary'],
+    '/maps/village.glb':['public/maps/village.glb','model/gltf-binary'],
+    '/maps/village-collision.bin':['public/maps/village-collision.bin','application/octet-stream'],
+    '/maps/village-overview.svg':['public/maps/village-overview.svg','image/svg+xml'],
+    '/maps/village-license.txt':['public/maps/village-license.txt','text/plain'],
     '/maps/subzero-collision.bin':['public/maps/subzero-collision.bin','application/octet-stream'],
     '/addons/loaders/GLTFLoader.js':['node_modules/three/examples/jsm/loaders/GLTFLoader.js','text/javascript'],
     '/addons/utils/BufferGeometryUtils.js':['node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','text/javascript'],
@@ -556,6 +584,9 @@ const app = http.createServer((req, res) => {
     "/index.html": ["index.html", "text/html"],
     '/combat-visuals.js':['combat-visuals.mjs','text/javascript'],
     '/combat.css':['combat.css','text/css'],
+    '/menu.css':['menu.css','text/css'],
+    '/maps/subzero-preview.jpg':['public/maps/subzero-preview.jpg','image/jpeg'],
+    '/maps/village-preview.jpg':['public/maps/village-preview.jpg','image/jpeg'],
     "/district.css": ["district.css", "text/css"],
     "/three.module.js": [
       "node_modules/three/build/three.module.js", "text/javascript"
@@ -565,14 +596,20 @@ const app = http.createServer((req, res) => {
     ]
   };
 
+  for(const id of Object.keys(WEAPONS))routes['/weapons/'+id+'.glb']=['public/weapons/'+id+'.glb','model/gltf-binary'];
+  routes['/weapons/manifest.json']=['public/weapons/manifest.json','application/json'];
+  routes['/weapon-credits.html']=['public/weapon-credits.html','text/html'];
+  for(const name of ['pistol','rifle','shotgun','sniper','revolver','lmg','dmr','carbine','autoshot','smg','clipload2','singlebullet1'])routes['/audio/'+name+'.wav']=['public/audio/'+name+'.wav','audio/wav'];
+  for(const kind of ['concrete','wood','snow','grass'])for(let i=0;i<3;i++)routes['/audio/'+kind+'-'+i+'.ogg']=['public/audio/'+kind+'-'+i+'.ogg','audio/ogg'];
+  routes['/weapon-models.mjs']=['weapon-models.mjs','text/javascript'];
   const route = routes[pathname];
   if (!route) {
     res.writeHead(404);
     return res.end("Not found");
   }
 
-  const mapAsset=pathname.startsWith('/maps/');
-  const compressed=mapAsset && /\bgzip\b/.test(req.headers['accept-encoding']||'');
+  const mapAsset=pathname.startsWith('/audio/')||pathname.startsWith('/maps/')||pathname.startsWith('/weapons/')&&pathname.endsWith('.glb');
+  const compressed=mapAsset && /\.(glb|bin)$/.test(pathname) && /\bgzip\b/.test(req.headers['accept-encoding']||'');
   fs.readFile(path.join(__dirname, route[0]+(compressed?'.gz':'')), (error, data) => {
     if (error) {
       res.writeHead(500);
@@ -585,7 +622,7 @@ const app = http.createServer((req, res) => {
       ...(compressed?{'Content-Encoding':'gzip'}:{}),
       'Content-Length':data.length,
       "Content-Type": route[1],
-      "Cache-Control": pathname.startsWith("/maps/") ? "public, max-age=0, must-revalidate" : "no-store"
+      "Cache-Control": mapAsset ? "public, max-age=0, must-revalidate" : "no-store"
     });
     res.end(data);
   });
@@ -633,12 +670,12 @@ wss.on("connection", ws => {
         kills: 0, deaths: 0, damage: 0
       };
 
-      spawn(p, now);
+      spawn(p, now);p.readyEpoch=-1;p.shield=Number.MAX_SAFE_INTEGER;
       players.set(id, p);
       clients.set(id, ws);
       if (!host) host = id;
 
-      send(ws, { type: "welcome", id });
+      send(ws, { type: "welcome", id, mapId:mapId(), mapEpoch, world:currentWorld() });
       event({ kind: "notice", message: `${p.name} joined the arena` });
       return;
     }
@@ -646,6 +683,9 @@ wss.on("connection", ws => {
     const p = players.get(id);
     if (!p) return;
 
+    if(m.type==='voteMap'){if(phase==='ended'&&Object.hasOwn(worlds,m.mapId))mapVotes.set(id,m.mapId);return;}
+    if(m.type==='mapReady') {if(m.mapId===mapId()&&m.mapEpoch===mapEpoch&&p.readyEpoch!==mapEpoch){p.readyEpoch=mapEpoch;p.shield=Date.now()+1500;}return;}
+    if(m.type==='map') {if(!changeMap(m.mapId,id))send(ws,{type:'error',message:'Only the host can change maps between rounds.'});return;}
     if (m.type === "input") {
       p.inputSeq=clamp(Math.floor(finite(m.seq)),0,1e9);
       p.input = {
@@ -660,8 +700,10 @@ wss.on("connection", ws => {
       p.lastInput = now;
     }
 
-    if (m.type === "start" && id === host && phase !== "playing")
+    if (m.type === "start" && id === host && phase !== "playing") {
+      if([...players.values()].some(p=>p.readyEpoch!==mapEpoch)){send(ws,{type:'error',message:'Waiting for all players to finish loading the map.'});return;}
       startRound();
+    }
 
     if (m.type === "loadout") changeLoadout(p,m,now);
 
@@ -684,13 +726,13 @@ wss.on("connection", ws => {
   ws.on("close", () => {
     if (!id) return;
     const p = players.get(id);
-    players.delete(id);
+    players.delete(id);mapVotes.delete(id);
     clients.delete(id);
     if (host === id) { host = players.keys().next().value || null; if(host)event({kind:"notice",message:`${players.get(host).name} is now the host`}); }
     if (p) event({ kind: "notice", message: `${p.name} left the arena` });
 
     if (!players.size) {
-      phase = "lobby";
+      phase = "lobby";roundResults=[];mapVotes.clear();
       grenades = [];
       smokes = [];
     }
@@ -708,12 +750,14 @@ setInterval(() => {
 
   if (phase === "playing" && now >= roundEnd) {
     phase = "ended";
+    roundResults=[...players.values()].map(publicPlayer);
     grenades = [];
     event({ kind: "round", message: "ROUND COMPLETE" });
   }
 
   if (phase === "playing") {
     for (const p of players.values()) {
+      if(p.readyEpoch!==mapEpoch)continue;
       refreshEquipment(p,now);
       if (p.hp <= 0) {
         if (now >= p.aliveAt) spawn(p, now);
@@ -727,7 +771,7 @@ setInterval(() => {
       if(!wasGround&&p.ground&&oldVy < -2)event({kind:'land',id:p.id,x:p.x,y:p.y,z:p.z});
       if(p.ground&&Math.hypot(p.x-ox,p.z-oz)>.015&&now>(p.nextStep||0)) {
         p.nextStep=now+(p.input.sprint?280:420);
-        event({kind:'step',id:p.id,x:p.x,y:p.y,z:p.z,surface:floorSurface(p)});
+        event({kind:'step',id:p.id,x:p.x,y:p.y,z:p.z,surface:floorSurface(p),volume:p.stance==='prone'?.3:p.stance==='crouch'?.45:p.input.sprint?1:.7});
       }
 
       if (p.reloadAt && now >= p.reloadAt) {
@@ -786,8 +830,9 @@ for(const g of grenades) {
     const p = players.get(id);
     send(ws, {
       type: "state",
-      now, phase, end: roundEnd, host,
+      now, phase, end: roundEnd, host, mapId:mapId(),mapEpoch,readyCount:[...players.values()].filter(p=>p.readyEpoch===mapEpoch).length,
       players: list, grenades, smokes,
+      results:phase==='ended'?roundResults:[],mapVotes:Object.fromEntries(mapCatalog.map(m=>[m.id,[...mapVotes.values()].filter(v=>v===m.id).length])),myVote:mapVotes.get(id)||null,
       self: {
         slot: p.slot, guns: p.guns,
         ammo: p.ammo, reloadAt: p.reloadAt,
@@ -885,7 +930,15 @@ function surfaceAt(o,d,dist) {
 }
 
 function floorSurface(p){
- if(mapCollision)return 'concrete';
+ if(mapCollision){
+  if(MAP?.id==='subzero'){
+   mapCollision.surfaceTags ||= fs.readFileSync(path.join(__dirname,'public/maps/subzero-surfaces.bin'));
+   mapCollision.distance({x:p.x,y:p.y+.15,z:p.z},{x:0,y:-1,z:0},.4,true);
+   return ['concrete','snow','wood'][mapCollision.surfaceTags[mapCollision.lastTriangle?.index]||0];
+  }
+  if(MAP?.id==='village'&&p.y>1&&Math.abs(Math.abs(p.x)-9)<2&&Math.abs(p.z)<15)return 'wood';
+  return 'concrete';
+ }
  const surfaces=BLOCKS.filter(b=>overlaps(p.x,p.z,.2,b)&&Math.abs(b.y+b.h-p.y)<.08);
  if(p.y<.1){if(p.x<-10)return 'grass';if(Math.abs(p.x-3)<4.5||Math.abs(p.z)<3.5)return 'tile';return 'dirt';}
  return surfaces.at(-1)?.mat||'concrete';
