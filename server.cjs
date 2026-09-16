@@ -332,7 +332,7 @@ function applyDamage(attacker,victim,amount,now,gun,head=false,origin=null){
  const dealt=Math.min(victim.hp,Math.max(0,Math.round(amount)));
  if(attacker&&attacker!==victim)attacker.damage+=dealt;
  victim.hp-=dealt;
- if(attacker&&attacker!==victim)send(clients.get(attacker.id),{type:'event',kind:'hit',head,amount:dealt,victim:victim.name,kill:victim.hp===0});
+ if(attacker&&attacker!==victim)send(clients.get(attacker.id),{type:'event',kind:'hit',head,amount:dealt,victim:victim.name,victimId:victim.id,kill:victim.hp===0});
  send(clients.get(victim.id),{type:'event',kind:'hurt',amount:dealt,source:origin?{x:origin.x,z:origin.z}:attacker&&attacker!==victim?{x:attacker.x,z:attacker.z}:null});
  if(victim.hp===0){
   victim.deaths++;victim.aliveAt=now+RESPAWN;victim.reloadAt=0;

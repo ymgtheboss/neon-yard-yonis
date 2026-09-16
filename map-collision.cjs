@@ -23,7 +23,7 @@ class MapCollision {
   p.motionTime=(p.motionTime||0)+dt;
   p.stance=p.stance||'stand';p.vx=p.vx||0;p.vz=p.vz||0;
   if(p.ground)p.lastGroundAt=p.motionTime;
-  if(i.jump&&!p.jumpHeld)p.jumpUntil=p.motionTime+.12;
+  if(i.jump&&!p.jumpHeld)p.jumpUntil=p.motionTime+.14;
   p.jumpHeld=!!i.jump;
   const crouchEdge=(i.crouch||i.slide)&&!p.crouchHeld;
   p.crouchHeld=!!(i.crouch||i.slide);
@@ -38,7 +38,7 @@ class MapCollision {
   if(!this.blocked(p.x,p.y,p.z,desired.rx,desired.height,desired.rz))p.stance=requested;
   const shape=bodyShape(p),blocked=(x,y,z)=>this.blocked(x,y,z,shape.rx,shape.height,shape.rz);
   const support=(x,z,top,drop)=>this.support(x,z,top,drop,shape.rx,shape.rz);
-  if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.09)&&p.stance!=='prone'){
+  if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.1)&&p.stance!=='prone'){
    p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
   }
   const f=Number(!!i.forward)-Number(!!i.back),s=Number(!!i.right)-Number(!!i.left),length=Math.hypot(f,s)||1;
@@ -48,11 +48,14 @@ class MapCollision {
   const steps=Math.max(1,Math.ceil(dt/.008)),sub=dt/steps;
   for(let n=0;n<steps;n++){
    if(p.stance==='slide'&&p.motionTime<(p.slideUntil||0)){
-    const friction=Math.exp(-1.25*sub);p.vx*=friction;p.vz*=friction;
+    // Turn gently without generating speed; airborne slides retain momentum.
+    const velocity=Math.hypot(p.vx,p.vz);
+    if((f||s)&&velocity>.1){const turn=1-Math.exp(-2.2*sub),dx=p.vx+(tx/speed*velocity-p.vx)*turn,dz=p.vz+(tz/speed*velocity-p.vz)*turn,len=Math.hypot(dx,dz);if(len>.001){p.vx=dx/len*velocity;p.vz=dz/len*velocity;}}
+    const friction=Math.exp(-(p.ground?1.25:.12)*sub);p.vx*=friction;p.vz*=friction;
    } else {
     if(p.ground){
      const reversing=p.vx*tx+p.vz*tz<0;
-     const blend=1-Math.exp(-(f||s?(reversing?28:18):25)*sub);
+     const blend=1-Math.exp(-(f||s?(reversing?30:20):28)*sub);
      p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
     }else if(f||s){
      // Air steering preserves momentum; releasing a key never brakes mid-jump.

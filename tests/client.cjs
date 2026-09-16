@@ -111,3 +111,10 @@ test('Results use the frozen winner and preserve vote buttons during updates',()
  assert.equal(els.get('voteChoices').firstElementChild,button);assert.ok(button.textContent.includes('1 votes'));assert.equal(button.attributes['aria-pressed'],'true');
  run('clearTransientWorld()');
 });
+
+test('Rapid hits accumulate damage only for the same target and reset cleanly',()=>{
+ setState();run("clearTransientWorld();onEvent({kind:'hit',amount:12,victim:'A',victimId:'one'});onEvent({kind:'hit',amount:18,victim:'A',victimId:'one'})");
+ assert.equal(els.get('hitConfirm').textContent,'30 DMG');
+ run("onEvent({kind:'hit',amount:9,victim:'A',victimId:'two'})");assert.equal(els.get('hitConfirm').textContent,'9 DMG');
+ run('clearTransientWorld()');assert.equal(run('hitDamage'),0);
+});

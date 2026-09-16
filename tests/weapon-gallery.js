@@ -9,7 +9,7 @@
   const kit=assets.createImportedKit(id);if(!kit?.userData.imported)throw Error('Missing GLB '+id);kit.scale.setScalar(.85);scene.add(kit);const camera=new THREE.PerspectiveCamera(70,360/270,.01,10);
   const moving=kit.userData.bolt.children.length,magazine=kit.userData.magazine.children.length;
   for(const [pose,aim]of [false,true].entries()){
-   kit.position.set(aim?0:.24,aim?-kit.userData.sightHeight*.85:-.22,aim?(['pistol','revolver'].includes(id)?-.37:-.31):-.62);
+   kit.position.set(aim?0:.24,aim?-kit.userData.sightHeight*.85:-.22,aim?kit.userData.adsZ:-.62);
    renderer.render(scene,camera);
    const x=i%5*360,y=Math.floor(i/5)*270+pose*540;ctx.drawImage(renderer.domElement,x,y);ctx.fillStyle='#10232c';ctx.fillRect(x,y,360,23);ctx.fillStyle='white';ctx.font='13px sans-serif';ctx.fillText(id+' / '+(aim?'ADS':'HIP'),x+10,y+16);
    if(!aim)stats.push({id,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,moving,magazine});

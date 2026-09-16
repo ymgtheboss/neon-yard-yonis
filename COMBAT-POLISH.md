@@ -15,3 +15,10 @@ Subzero footstep materials are derived from render/collision triangle matches; B
 Rebuild audio with `python3 scripts/build-combat-audio.py /path/to/extracted/sources`. The source folder should contain `Prepared SFX Library/`, Kenney's `Audio/`, `clipload2.wav`, and `singlebullet1.wav`; download links are in the credits.
 
 Validation: engine, client, combat, Subzero/Bellhaven collision, weapon-asset and multiplayer checks; `node tests/browser.cjs --presentation` captures actual reload poses and checks audio decoding, the winner preview and voting UI. Browser screenshots use software rendering and are not hardware FPS measurements.
+
+## Handling and sight fitting
+
+- Weapon-specific sight widths, heights, housing shapes and eye relief; compact reflex sights for sidearms and SMGs, chamfered holographic sights for rifles, and a fitted M14 tube. The AWP retains its imported scope. Magnified masks use viewport-relative dimensions, with separate AWP/M14 sizes.
+- Confirmed hit markers pulse and fade; short bursts accumulate actual damage per target ID. Headshots and eliminations have distinct tones, with audio overlap limited during rapid fire. Player impacts use small spark streaks.
+- Ground acceleration and braking are more responsive, with slightly more forgiving jump buffering and coyote time. Slides allow gentle steering without adding speed. Weapon bob blends in and out; airborne camera tracking is tighter and landing motion respects the motion setting.
+- Verified with combat/client checks, movement consistency at 30/60/120 Hz, and real Chrome rendering of all ten weapons plus a multiplayer round.

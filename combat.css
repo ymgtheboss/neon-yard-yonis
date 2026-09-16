@@ -17,10 +17,10 @@ button,input,select,.tag{border-radius:8px}button{background:#1c2c40;border-colo
 #menu{padding-bottom:110px}#menu .footer{position:fixed;bottom:0;left:0;width:100%;box-sizing:border-box;margin:0;padding:14px max(24px,calc((100vw - 1240px)/2));background:#0b1727f5;border-top:1px solid #43607966;z-index:10;box-shadow:0 -10px 30px #07111e55}.score-table{max-height:32vh;overflow:auto;margin:12px 0 17px}.score-table table{margin:0}.score-table th{position:sticky;top:0;background:#112035;z-index:1}#board .row{padding-top:8px}
 
 /* Single-pass magnified world view with coated lens, etched reticle and eye relief. */
-#scope{background:radial-gradient(circle at center,transparent 0 32vh,#080b10 33vh);display:grid;place-items:center}
+#scope{background:radial-gradient(circle at center,transparent 0 calc(var(--lens-size,68vmin) / 2 - 1px),#080b10 calc(var(--lens-size,68vmin) / 2));display:grid;place-items:center}
 #scope.hidden{display:none}
 #scope::before,#scope::after{display:none}
-.scope-lens{position:relative;width:64vh;height:64vh;border-radius:50%;overflow:hidden;border:5px solid #151a20;box-shadow:0 0 0 3px #566068,0 0 0 10px #101419,0 0 0 12px #303b44,inset 0 0 30px 10px #020911aa;background:linear-gradient(135deg,#a5e7f010,transparent 32%,transparent 70%,#47998312)}
+.scope-lens{position:relative;width:var(--lens-size,68vmin);height:var(--lens-size,68vmin);border-radius:50%;overflow:hidden;border:5px solid #151a20;box-shadow:0 0 0 3px #566068,0 0 0 10px #101419,0 0 0 12px #303b44,inset 0 0 30px 10px #020911aa;background:linear-gradient(135deg,#a5e7f010,transparent 32%,transparent 70%,#47998312)}
 .scope-lens svg{position:absolute;inset:0;width:100%;height:100%}
 .scope-flare{position:absolute;inset:0;opacity:var(--shot-glow,0);background:radial-gradient(ellipse at 50% 110%,#fff3b8 0%,#ff9c2880 17%,transparent 48%);mix-blend-mode:screen}
 
@@ -36,3 +36,5 @@ button,input,select,.tag{border-radius:8px}button{background:#1c2c40;border-colo
 #roundMedals{display:flex;flex-wrap:wrap;gap:8px}#roundMedals span{font-size:10px;letter-spacing:1px;background:#e1ba7620;border:1px solid #e1ba7670;border-radius:5px;padding:7px;color:#ffe0a0}
 #mapVote{padding:14px 0;margin:14px 0;border-top:1px solid #ffffff20}#voteChoices{display:flex;gap:10px;margin:10px 0}#voteChoices button{flex:1}#voteChoices .selected{border-color:#67dcc7;background:#234f50;color:#dbfff6}.round-stats{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}
 @media(max-width:600px){#winnerShowcase{gap:8px;padding:0 8px}#winnerModel{width:125px}#winnerModel canvas{margin-left:-12px}#winnerName{font-size:20px}}
+
+#hitmark{filter:drop-shadow(0 1px 2px #000) drop-shadow(0 0 5px currentColor);will-change:transform,opacity}

@@ -1005,6 +1005,7 @@ $('applyMapVote').onclick=()=>{
  if(choices.length&&votes[choices[0].id]>0)send({type:'map',mapId:choices[0].id});
 };
 let damageBearing=null,damageDirectionUntil=0,killConfirmUntil=0;
+let hitAt=-1000,hitDamage=0,hitTarget=null,hitSoundAt=-1000,hitPower=1;
 function onEvent(m) {
   if(m.kind==="notice") feed(m.message);
   if(m.kind==="round") announce(m.message,2600);
@@ -1014,13 +1015,16 @@ function onEvent(m) {
       announce(`${m.streak} ELIMINATION STREAK`);
   }
   if(m.kind==="hit") {
-    hitUntil=performance.now()+(m.kill?340:m.head?230:160);
+    const stamp=performance.now();
+    hitDamage=stamp-hitAt<280&&hitTarget===(m.victimId??m.victim)?hitDamage+(m.amount||0):(m.amount||0);hitTarget=m.victimId??m.victim;hitAt=stamp;hitPower=m.kill?1.35:m.head?1.15:1;
+    hitUntil=stamp+(m.kill?340:m.head?230:160);
     $('hitmark').textContent=m.head?'✧':'×';
-    $('hitConfirm').textContent=(m.head?'HEADSHOT · ':'')+(m.amount||'')+(m.amount?' DMG':'');
+    $('hitConfirm').textContent=(m.head?'HEADSHOT · ':'')+(hitDamage||'')+(hitDamage?' DMG':'');
     if(m.kill){$('killConfirm').textContent=(m.head?'HEADSHOT ELIMINATION':'ELIMINATED')+' · '+(m.victim||'');killConfirmUntil=performance.now()+1800;}
     $('hitmark').style.transform='translate(-50%,-50%) scale('+(m.kill?1.35:m.head?1.15:1)+')';
     $("hitmark").style.color=m.kill?"#ffb66e":m.head?"#ffdc76":"white";
-    tone(m.head?1250:620,m.head?.055:.035,.045);if(m.head)tone(1850,.09,.025);if(m.kill){tone(440,.16,.035);tone(880,.2,.025);}
+    // Limit pellet/automatic-fire overlap while keeping lethal hits unmistakable.
+    if(stamp-hitSoundAt>55||m.kill){tone(m.head?1320:720,m.head?.07:.035,.04);if(m.head)tone(1980,.11,.022);if(m.kill){tone(660,.13,.035);tone(990,.22,.028);}hitSoundAt=stamp;}
     if(m.kill) announce("ELIMINATION +1",1000);
   }
   if(m.kind==="hurt") {hurt=Math.min(1,hurt+.65);damageBearing=m.source;damageDirectionUntil=performance.now()+900;}
@@ -1484,6 +1488,7 @@ const weaponMotion = {
   x: .24, y: -.24, z: -.64,
   rx: 0, ry: 0, rz: 0,
   stride: 0,
+  gait:0,
   previousYaw: 0,
   previousPitch: 0,
   previousY: 0,
@@ -1538,8 +1543,9 @@ function upgradeFrame(dt, now) {
 
   if (moving) weaponMotion.stride += dt * strideSpeed;
 
-  const bobX = moving ? Math.sin(weaponMotion.stride) * .009 : 0;
-  const bobY = moving ? Math.abs(Math.cos(weaponMotion.stride)) * .012 : 0;
+  weaponMotion.gait=motionBlend(weaponMotion.gait,moving?Math.min(1,travelSpeed/6):0,dt,12);
+  const bobX = Math.sin(weaponMotion.stride) * .009*weaponMotion.gait;
+  const bobY = Math.abs(Math.cos(weaponMotion.stride)) * .012*weaponMotion.gait;
   const breath = Math.sin(now * .0018) * .0025;
 
   let yawChange = yaw - weaponMotion.previousYaw;
@@ -1577,7 +1583,7 @@ function upgradeFrame(dt, now) {
 
   const targetX = aiming ? 0 : sprinting ? .08 : .24;
   const targetY = aiming ? -data.sightHeight : -.22;
-  const targetZ = aiming ? (['pistol','revolver'].includes(data.id)?-.37:-.31) : -.62;
+  const targetZ = aiming ? (data.adsZ??(['pistol','revolver'].includes(data.id)?-.37:-.31)) : -.62;
 
   weaponMotion.x = motionBlend(
     weaponMotion.x,
@@ -1850,9 +1856,9 @@ const impactParticles=[];
 function impact(end,origin){
  if(end.surface==='air')return;
  const mat=particleMats[end.surface]||particleMats.concrete;
- const count=settings.quality==='performance'?2:5;
+ const count=end.surface==='player'?3:settings.quality==='performance'?2:5;
  for(let n=0;n<count;n++) {
-  const m=new THREE.Mesh(particleGeo,mat);m.position.set(end.x,end.y,end.z);
+  const m=new THREE.Mesh(particleGeo,mat);m.position.set(end.x,end.y,end.z);if(end.surface==='player')m.scale.set(.3,.3,1.8);
   const away=new THREE.Vector3(origin.x-end.x,origin.y-end.y,origin.z-end.z).normalize();
   away.multiplyScalar(.7+Math.random());away.x+=(Math.random()-.5)*1.6;away.y+=Math.random()*1.8;away.z+=(Math.random()-.5)*1.6;
   scene.add(m);impactParticles.push({m,v:away,life:.18+Math.random()*.3});
@@ -1992,7 +1998,7 @@ function clearTransientWorld(){
  for(const e of effects){scene.remove(e.object);if(e.dispose){e.object.geometry.dispose();e.object.material.dispose();}}effects.length=0;
  recoil=0;recoilPitch=0;recoilYaw=0;viewMuzzleLight.intensity=0;
  for(const s of muzzleSparks)viewScene.remove(s.mesh);muzzleSparks.length=0;
- $('smokeScreen').style.opacity=0;medkitUseAt=-10000;medkitModel.visible=false;flashEnd=0;hurt=0;damageBearing=null;damageDirectionUntil=killConfirmUntil=hitUntil=0;show('scope',false);
+ $('smokeScreen').style.opacity=0;medkitUseAt=-10000;medkitModel.visible=false;flashEnd=0;hurt=0;damageBearing=null;damageDirectionUntil=killConfirmUntil=hitUntil=0;hitAt=-1000;hitDamage=0;hitTarget=null;weaponMotion.gait=0;weaponMotion.landing=0;show('scope',false);
 }
 function disposeAvatar(a){scene.remove(a.root);disposeKit(a.root);a.shield.material.dispose();}
 function districtFrame(dt,now){
@@ -2059,9 +2065,9 @@ function frame(now) {
     const target=new THREE.Vector3(local.x+(local.vx||0)*ahead,local.y+stanceHeight(local)-.17*CHARACTER_SCALE+(local.ground?0:(local.vy||0)*ahead),local.z+(local.vz||0)*ahead);
     if(!cameraReady || camera.position.distanceTo(target)>8) {
       camera.position.copy(target);cameraReady=true;
-    } else {const blend=1-Math.exp(-22*dt);camera.position.x=THREE.MathUtils.lerp(camera.position.x,target.x,blend);camera.position.z=THREE.MathUtils.lerp(camera.position.z,target.z,blend);camera.position.y=THREE.MathUtils.lerp(camera.position.y,target.y,1-Math.exp(-16*dt));}
+    } else {const blend=1-Math.exp(-22*dt);camera.position.x=THREE.MathUtils.lerp(camera.position.x,target.x,blend);camera.position.z=THREE.MathUtils.lerp(camera.position.z,target.z,blend);camera.position.y=THREE.MathUtils.lerp(camera.position.y,target.y,1-Math.exp(-(local.ground?18:30)*dt));}
 
-    camera.rotation.set(pitch,yaw,0);
+    camera.rotation.set(pitch,yaw,settings.motion==='yes'?-weaponMotion.landing*.22:0);
     const scopedId=state.self.guns[state.self.slot];
     const sniper=scopedId==='sniper'||scopedId==='dmr';
     const aiming=aim&&active()&&state.self.reloadAt<=serverNow();
@@ -2069,6 +2075,7 @@ function frame(now) {
     camera.fov=THREE.MathUtils.lerp(camera.fov,targetFov,1-Math.exp(-15*dt));
     camera.updateProjectionMatrix();
     show("scope",aiming&&sniper);
+    $('scope').style.setProperty?.('--lens-size',scopedId==='dmr'?'58vmin':'68vmin');
     show("crosshair",me.hp>0&&!aiming);
     $("scope").style.setProperty?.("--shot-glow",String(Math.max(0,1-(now-shotAt)/100)*.65));
 
@@ -2114,9 +2121,11 @@ function frame(now) {
   syncWorld(dt,now);
   hurt*=Math.exp(-5*dt);
   $("damage").style.opacity=hurt;
-  $("hitmark").style.opacity=now<hitUntil?1:0;
-  $('hitConfirm').style.opacity=now<hitUntil+160?1:0;
-  $('killConfirm').style.opacity=now<killConfirmUntil?1:0;
+  const hitFade=clamp((hitUntil-now)/90,0,1);
+  $("hitmark").style.opacity=hitFade;
+  $('hitmark').style.transform='translate(-50%,-50%) scale('+(hitPower+(settings.motion==='yes'?.4*Math.exp(-Math.max(0,now-hitAt)/55):0))+')';
+  $('hitConfirm').style.opacity=hitUntil>0?clamp((hitUntil+220-now)/160,0,1):0;
+  $('killConfirm').style.opacity=clamp((killConfirmUntil-now)/260,0,1);
   $('damageDirection').style.opacity=damageBearing&&now<damageDirectionUntil?1:0;
   if(damageBearing&&me){const bearing=Math.atan2(-(damageBearing.x-me.x),-(damageBearing.z-me.z));$('damageDirection').style.transform='translate(-50%,-50%) rotate('+(-(bearing-yaw))+'rad)';}
   const flashRemaining=Math.max(0,flashEnd-now);

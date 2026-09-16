@@ -32,10 +32,19 @@ test('Confirmed hit feedback reports capped damage, source direction and headsho
  reset();const a=p('a'),b=p('b',3,14),am=add(a),bm=add(b);b.hp=30;
  e.applyDamage(a,b,90,10000,'sniper',true);
  assert.equal(a.headshots,1);assert.equal(a.damage,30);assert.equal(a.kills,1);
- const hit=am.find(m=>m.kind==='hit');assert.equal(hit.amount,30);assert.equal(hit.head,true);assert.equal(hit.kill,true);assert.equal(hit.victim,'b');
+ const hit=am.find(m=>m.kind==='hit');assert.equal(hit.amount,30);assert.equal(hit.head,true);assert.equal(hit.kill,true);assert.equal(hit.victim,'b');assert.equal(hit.victimId,'b');
  assert.deepEqual(bm.find(m=>m.kind==='hurt').source,{x:a.x,z:a.z});
  e.applyDamage(a,b,90,10001,'sniper',true);assert.equal(a.headshots,1);
  e.startRound();assert.equal(a.headshots,0);assert.equal(e.publicPlayer(a).headshots,0);
 });
 
+test('Slide steering turns gradually without creating extra speed',()=>{
+ const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,40);a.input.slide=true;step(a,1);
+ const speed=Math.hypot(a.vx,a.vz);a.input={right:true,slide:true};step(a,12);
+ assert.equal(a.stance,'slide');assert.ok(a.vx>0&&a.vz<0);assert.ok(Math.hypot(a.vx,a.vz)<speed);
+});
+test('Movement converges across 30, 60 and 120 Hz updates',()=>{
+ const results=[30,60,120].map(hz=>{const a=p('a',6,10);a.input={forward:true,sprint:true};for(let i=0;i<hz/2;i++)collision.move(a,1/hz);return a;});
+ for(const a of results){assert.ok(Math.abs(a.z-results[0].z)<.045);assert.ok(Math.abs(a.vz-results[0].vz)<.01);}
+});
 console.log(`${count} combat upgrade checks passed.`);
