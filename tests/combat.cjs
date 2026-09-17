@@ -67,4 +67,14 @@ test('Slide jumping carries momentum once and retains the ordinary jump apex',()
  assert.equal(a.stance,'stand');assert.equal(a.slideUntil,0);assert.ok(!a.ground);assert.ok(Math.hypot(a.vx,a.vz)>entry*.9);assert.ok(Math.hypot(a.vx,a.vz)<entry);
  let apex=a.y;for(let i=0;i<70;i++){collision.move(a,1/60);apex=Math.max(apex,a.y);}const normal=p('n',10,10);normal.input={jump:true};let ordinary=0;for(let i=0;i<71;i++){collision.move(normal,1/60);ordinary=Math.max(ordinary,normal.y);}assert.ok(Math.abs(apex-ordinary)<.005);
 });
+test('Team Deathmatch scores enemy kills once, rejects friendly damage, and resets between modes',()=>{
+ reset();const a=p('a'),b=p('b'),friend=p('friend');add(a);add(b);add(friend);
+ vm.runInContext("phase='lobby';host='a';setGameMode('tdm','a')",ctx);assert.equal(a.team,friend.team);assert.notEqual(a.team,b.team);
+ e.applyDamage(a,friend,100,10000,'rifle');assert.equal(friend.hp,100);
+ e.applyDamage(a,b,100,10000,'rifle');e.applyDamage(a,b,100,10001,'rifle');assert.equal(vm.runInContext('teamScores.blue',ctx),1);
+ e.applyDamage(a,a,100,10002,'frag');assert.equal(vm.runInContext('teamScores.blue',ctx),1);
+ e.players.delete(a.id);assert.equal(vm.runInContext('teamScores.blue',ctx),1);
+ vm.runInContext("setGameMode('deathmatch','a')",ctx);assert.equal(b.team,null);assert.equal(friend.team,null);assert.equal(vm.runInContext('teamScores.blue',ctx),0);
+ b.hp=100;e.applyDamage(friend,b,20,10003,'rifle');assert.equal(b.hp,80);vm.runInContext("setGameMode('capture','a')",ctx);
+});
 console.log(`${count} combat upgrade checks passed.`);

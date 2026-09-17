@@ -200,7 +200,7 @@ tr.me { color:var(--cyan); background:#62e5db0b }
       </nav>
       <main class="menu-content">
         <section id="menuHome" class="menu-page home-page" aria-labelledby="homeArenaName">
-          <div class="home-arena"><div class="eyebrow"><span class="status-dot"></span> CURRENT ARENA</div><h2 id="homeArenaName" tabindex="-1">Subzero</h2><p id="homeArenaDescription">Snowbound streets. Close encounters.</p><div class="home-tags"><span>CAPTURE POINTS / DEATHMATCH</span><span>16 PLAYERS</span></div></div>
+          <div class="home-arena"><div class="eyebrow"><span class="status-dot"></span> CURRENT ARENA</div><h2 id="homeArenaName" tabindex="-1">Subzero</h2><p id="homeArenaDescription">Snowbound streets. Close encounters.</p><div class="home-tags"><span>FFA / TEAM DEATHMATCH / CAPTURE POINTS</span><span>16 PLAYERS</span></div></div>
           <div class="home-coordinate" aria-hidden="true">NEON YARD<br>COMBAT OPERATIONS / 02</div>
         </section>
         <section id="menuWeapons" class="menu-page detail-page hidden" aria-labelledby="weaponsTitle">
@@ -267,7 +267,7 @@ tr.me { color:var(--cyan); background:#62e5db0b }
     <h2 id="roomTitle">Ready when you are.</h2>
     <p id="roomHint">Share the address printed in the host's terminal.</p>
     <p id="roomUrl"></p>
-    <div class="map-picker"><label for="modeSelect">GAME MODE</label><select id="modeSelect"><option value="capture">Capture Points · 3 rotating zones</option><option value="deathmatch">Free-for-all Deathmatch</option></select><small>Hold A, B and C to score. All three move every 60 seconds.</small></div>
+    <div class="map-picker"><label for="modeSelect">GAME MODE</label><select id="modeSelect"><option value="capture">Capture Points · 3 rotating zones</option><option value="tdm">Team Deathmatch · Blue vs Red</option><option value="deathmatch">Free-for-All Deathmatch · Every player for themselves</option></select><small id="modeDescription">Hold A, B and C to score. All three move every 60 seconds.</small></div>
     <div class="map-picker"><label for="mapSelect">ARENA</label><select id="mapSelect"></select><a id="mapOverview" href="/maps/village-overview.svg" target="_blank" rel="noopener">View Bellhaven layout ↗</a></div>
     <p id="mapLoadStatus" aria-live="polite"></p><button id="retryMap" class="hidden">Retry map download</button>
     <div id="roomList"></div>
@@ -291,7 +291,7 @@ tr.me { color:var(--cyan); background:#62e5db0b }
       <tbody id="scores"></tbody>
     </table></div>
     <div class="row">
-      <label class="map-picker">NEXT MODE <select id="boardModeSelect"><option value="capture">Capture Points · 3 rotating zones</option><option value="deathmatch">Free-for-all Deathmatch</option></select></label>
+      <label class="map-picker">NEXT MODE <select id="boardModeSelect"><option value="capture">Capture Points · 3 rotating zones</option><option value="tdm">Team Deathmatch · Blue vs Red</option><option value="deathmatch">Free-for-All Deathmatch · Every player for themselves</option></select></label>
       <label class="map-picker">NEXT ARENA <select id="boardMapSelect"></select></label>
       <button id="rematch" class="primary hidden">PLAY ANOTHER ROUND</button>
       <button id="boardSettings">Settings</button>
@@ -935,6 +935,7 @@ function updateInterface() {
   show("start",state.phase!=="playing");
   $("start").disabled=!host||!mapReady||state.readyCount<state.players.length;
   for(const id of ['modeSelect','boardModeSelect']){$(id).value=state.nextMode||state.mode||'deathmatch';$(id).disabled=!host||state.phase==='playing';}
+  $('modeDescription').textContent=({capture:'Blue vs Red. Hold A, B and C; all zones move every 60 seconds.',tdm:'Blue vs Red. Each enemy elimination earns one team point. Highest team score wins.',deathmatch:'Every player for themselves. Most eliminations wins.'})[state.nextMode||state.mode]||'';
   for(const id of ['mapSelect','boardMapSelect']){$(id).value=state.mapId||MAP?.id||'subzero';$(id).disabled=!host||state.phase==='playing';}
   if(mapReady)$('mapLoadStatus').textContent=(MAP?.name||'Mill District')+' · '+(state.readyCount??state.players.length)+'/'+state.players.length+' players ready';
   show("resume",state.phase==="playing");
@@ -973,7 +974,7 @@ function updateInterface() {
     ? leaders.length>1 ? "Tied finish — run it back."
       : `${sorted[0]?.name || "Nobody"} takes the round.`
     : "Most kills wins. Ties: fewer deaths, then more damage.";
-  if(state.mode==='capture'){const scores=state.capture?.scores||{blue:0,red:0};$('winner').textContent=ended?(scores.blue===scores.red?'TEAM DRAW':scores.blue>scores.red?'BLUE TEAM WINS':'RED TEAM WINS')+' · '+scores.blue+' — '+scores.red:'Hold three zones to earn team points. Zones move every 60 seconds.';}
+  if(state.mode==='capture'||state.mode==='tdm'){const scores=(state.mode==='capture'?state.capture?.scores:state.teamScores)||{blue:0,red:0};$('winner').textContent=ended?(scores.blue===scores.red?'TEAM DRAW':scores.blue>scores.red?'BLUE TEAM WINS':'RED TEAM WINS')+' · '+scores.blue+' — '+scores.red:state.mode==='tdm'?'Enemy eliminations earn team points. Highest team score wins.':'Hold three zones to earn team points. Zones move every 60 seconds.';}
   $('podium').replaceChildren();
   if(ended)sorted.slice(0,3).forEach((p,i)=>{const card=document.createElement('div');card.className='podium-card place-'+i;const rank=document.createElement('small'),name=document.createElement('strong'),score=document.createElement('span');rank.textContent=leaders.length>1&&leaders.some(l=>l.id===p.id)?'JOINT LEAD':['MVP / 01','RUNNER UP / 02','THIRD PLACE / 03'][i];name.textContent=p.name;score.textContent=state.mode==='capture'?(p.captures||0)+' CAPTURES':p.kills+' ELIMINATIONS';card.append(rank,name,score);$('podium').append(card);});
   $('roundStats').replaceChildren();
@@ -2152,7 +2153,9 @@ const objectiveVisuals=new Map();let captureWave=0;
 function clearCaptureObjectives(){for(const v of objectiveVisuals.values()){scene.remove(v.ring);v.ring.geometry.dispose();v.ring.material.dispose();v.label.remove();v.card.remove();}objectiveVisuals.clear();captureWave=0;show('captureHud',false);}
 function updateCaptureObjectives(now){
  const enabled=state?.mode==='capture'&&state.phase==='playing'&&state.capture;
- show('captureHud',!!enabled);if(!enabled){if(objectiveVisuals.size)clearCaptureObjectives();return;}
+ show('captureHud',!!enabled);if(!enabled){if(objectiveVisuals.size)clearCaptureObjectives();
+  if(state?.mode==='tdm'&&state.phase==='playing'){show('captureHud');const score=state.teamScores||{blue:0,red:0};$('teamScore').textContent='BLUE '+score.blue+' — '+score.red+' RED · YOU: '+(me?.team||'').toUpperCase();$('captureTimer').textContent='TEAM DEATHMATCH · ENEMY ELIMINATIONS SCORE';}return;
+ }
  if(state.capture.wave!==captureWave){if(captureWave&&state.capture.wave>1)announce('CAPTURE ZONES RELOCATED',2200);captureWave=state.capture.wave;}
  const scores=state.capture.scores;$('teamScore').textContent='BLUE '+scores.blue+'  —  '+scores.red+' RED · YOU: '+(me?.team||'').toUpperCase();
  $('captureTimer').textContent='ALL ZONES MOVE IN '+Math.max(0,Math.ceil((state.capture.nextMove-serverNow())/1000))+'s';
@@ -2210,7 +2213,7 @@ function frame(now) {
       `${String(Math.floor(remaining/60)).padStart(2,"0")}:${String(remaining%60).padStart(2,"0")}`;
     $("status").textContent=state.phase==="lobby"?"WAITING ROOM":
       state.phase==="ended"?"ROUND COMPLETE":
-      remaining<=30?"FINAL 30 SECONDS":state.mode==='capture'?'CAPTURE POINTS':"DEATHMATCH";
+      remaining<=30?"FINAL 30 SECONDS":state.mode==='capture'?'CAPTURE POINTS':state.mode==='tdm'?'TEAM DEATHMATCH':'FREE-FOR-ALL';
     $("network").textContent=
       `${fps} FPS · ${state.players.length}/16 PLAYERS · ${now-lastStateAt>1000?"CONNECTION SLOW":"LAN"}`;
 

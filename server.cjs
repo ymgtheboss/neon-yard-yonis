@@ -11,10 +11,10 @@ const RESPAWN = 5000;
 const players = new Map();
 const clients = new Map();
 const {CaptureMode}=require('./capture-mode.cjs');
-const capture=new CaptureMode();let gameMode='capture',finishedMode=null,finishedCapture=null;
-function teammates(a,b){return gameMode==='capture'&&a?.team&&a.team===b?.team;}
+const capture=new CaptureMode();let gameMode='capture',finishedMode=null,finishedCapture=null,teamScores={blue:0,red:0},finishedTeamScores=null;
+function teammates(a,b){return ['capture','tdm'].includes(gameMode)&&a?.team&&a.team===b?.team;}
 function assignTeam(p){const count={blue:0,red:0};for(const q of players.values())if(q!==p&&count[q.team]!==undefined)count[q.team]++;p.team=count.blue<=count.red?'blue':'red';}
-function setGameMode(mode,requester){if(requester!==host||phase==='playing'||!['capture','deathmatch'].includes(mode))return false;gameMode=mode;capture.reset();let n=0;for(const p of players.values()){p.team=mode==='capture'?['blue','red'][n++%2]:null;p.captures=0;}return true;}
+function setGameMode(mode,requester){if(requester!==host||phase==='playing'||!['capture','deathmatch','tdm'].includes(mode))return false;gameMode=mode;capture.reset();teamScores={blue:0,red:0};let n=0;for(const p of players.values()){p.team=mode!=='deathmatch'?['blue','red'][n++%2]:null;p.captures=0;}return true;}
 
 const WEAPONS = {
   pistol: {
@@ -79,7 +79,7 @@ function changeMap(id,requester){
  if(id===mapId())return true;
  const next=worlds[id],collision=collisionFor(next.MAP);
  ({BLOCKS,DECOR,PROPS,AREAS,SPAWNS,MAP}=next);mapCollision=collision;mapEpoch++;
- phase='lobby';roundEnd=0;capture.reset();grenades=[];smokes=[];roundResults=[];mapVotes.clear();
+ phase='lobby';roundEnd=0;capture.reset();teamScores={blue:0,red:0};grenades=[];smokes=[];roundResults=[];mapVotes.clear();
  for(const p of players.values()){p.readyEpoch=-1;p.input={};p.kills=p.deaths=p.damage=0;p.gearReadyAt=[0,0];spawn(p,Date.now());}
  broadcast({type:'mapChanged',mapId:mapId(),mapEpoch,world:currentWorld()});return true;
 }
@@ -344,7 +344,7 @@ function applyDamage(attacker,victim,amount,now,gun,head=false,origin=null){
  send(clients.get(victim.id),{type:'event',kind:'hurt',amount:dealt,source:origin?{x:origin.x,z:origin.z}:attacker&&attacker!==victim?{x:attacker.x,z:attacker.z}:null});
  if(victim.hp===0){
   victim.deaths++;victim.aliveAt=now+RESPAWN;victim.reloadAt=0;
-  if(attacker&&attacker!==victim){attacker.kills++;if(head)attacker.headshots=(attacker.headshots||0)+1;attacker.streak++;attacker.bestStreak=Math.max(attacker.bestStreak||0,attacker.streak);}
+  if(attacker&&attacker!==victim){if(gameMode==='tdm'&&attacker.team&&victim.team&&attacker.team!==victim.team)teamScores[attacker.team]++;attacker.kills++;if(head)attacker.headshots=(attacker.headshots||0)+1;attacker.streak++;attacker.bestStreak=Math.max(attacker.bestStreak||0,attacker.streak);}
   event({kind:'kill',killer:attacker?.name||'Explosion',victim:victim.name,gun,head,streak:attacker?.streak||0,killerId:attacker?.id,victimId:victim.id});
  }
 }
@@ -521,7 +521,8 @@ function startRound() {
   phase = "playing";
   roundResults=[];mapVotes.clear();
   roundEnd = now + ROUND;
-  if(gameMode==='capture'){let n=0;for(const p of players.values()){p.team=['blue','red'][n++%2];p.captures=0;}capture.start(now,SPAWNS.map(s=>({x:s[0],y:groundAt(s[0],s[1]),z:s[1]})));}else capture.reset();
+  teamScores={blue:0,red:0};let n=0;for(const p of players.values()){p.team=gameMode==='deathmatch'?null:['blue','red'][n++%2];p.captures=0;}
+  if(gameMode==='capture')capture.start(now,SPAWNS.map(s=>({x:s[0],y:groundAt(s[0],s[1]),z:s[1]})));else capture.reset();
   grenades = [];
   smokes = [];
 
@@ -679,7 +680,7 @@ wss.on("connection", ws => {
         kills: 0, deaths: 0, damage: 0
       };
 
-      if(gameMode==='capture')assignTeam(p);
+      if(gameMode!=='deathmatch')assignTeam(p);
       spawn(p, now);p.readyEpoch=-1;p.shield=Number.MAX_SAFE_INTEGER;
       players.set(id, p);
       clients.set(id, ws);
@@ -743,7 +744,7 @@ wss.on("connection", ws => {
     if (p) event({ kind: "notice", message: `${p.name} left the arena` });
 
     if (!players.size) {
-      phase = "lobby";capture.reset();roundResults=[];mapVotes.clear();
+      phase = "lobby";capture.reset();teamScores={blue:0,red:0};roundResults=[];mapVotes.clear();
       grenades = [];
       smokes = [];
     }
@@ -764,7 +765,7 @@ setInterval(() => {
    if(!mapCollision)return true;const o=playerEye(p),d={x:point.x-o.x,y:point.y+.5-o.y,z:point.z-o.z},len=Math.hypot(d.x,d.y,d.z);if(len<.1)return true;d.x/=len;d.y/=len;d.z/=len;return mapCollision.distance(o,d,len)>=len-.08;
   });
   if (phase === "playing" && now >= roundEnd) {
-    phase = "ended";finishedMode=gameMode;finishedCapture=gameMode==='capture'?JSON.parse(JSON.stringify(capture.state())):null;
+    phase = "ended";finishedTeamScores={...teamScores};finishedMode=gameMode;finishedCapture=gameMode==='capture'?JSON.parse(JSON.stringify(capture.state())):null;
     roundResults=[...players.values()].map(publicPlayer);
     grenades = [];
     event({ kind: "round", message: "ROUND COMPLETE" });
@@ -845,7 +846,7 @@ for(const g of grenades) {
     const p = players.get(id);
     send(ws, {
       type: "state",
-      now, phase, mode:phase==='ended'?finishedMode:gameMode,nextMode:gameMode,capture:phase==='ended'?finishedCapture:gameMode==='capture'?capture.state():null,end: roundEnd, host, mapId:mapId(),mapEpoch,readyCount:[...players.values()].filter(p=>p.readyEpoch===mapEpoch).length,
+      now, phase, mode:phase==='ended'?finishedMode:gameMode,nextMode:gameMode,teamScores:phase==='ended'?finishedTeamScores:teamScores,capture:phase==='ended'?finishedCapture:gameMode==='capture'?capture.state():null,end: roundEnd, host, mapId:mapId(),mapEpoch,readyCount:[...players.values()].filter(p=>p.readyEpoch===mapEpoch).length,
       players: list, grenades, smokes,
       results:phase==='ended'?roundResults:[],mapVotes:Object.fromEntries(mapCatalog.map(m=>[m.id,[...mapVotes.values()].filter(v=>v===m.id).length])),myVote:mapVotes.get(id)||null,
       self: {

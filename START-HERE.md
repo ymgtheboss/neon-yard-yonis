@@ -1,4 +1,4 @@
-Capture Points is now the default mode: Blue vs Red, three active zones, all relocating every 60 seconds. The host can choose Capture Points or Deathmatch in the lobby and select the next mode on the results screen. See [capture mode rules](CAPTURE-POINTS.md).
+Capture Points is now the default mode: Blue vs Red, three active zones, all relocating every 60 seconds. The host can choose Capture Points, Team Deathmatch (Blue vs Red), or Free-for-All Deathmatch in the lobby and select the next mode on the results screen. See [capture mode rules](CAPTURE-POINTS.md).
 
 The starting menu now has separate **Weapons**, **Loadout**, **Skins**, and **Maps** pages. Use **Play** to return home and **Enter Arena** to join. Choose a weapon slot before selecting its weapon; equipment and your callsign live on the Loadout page. An arena selected before joining applies if you become the room host.
 

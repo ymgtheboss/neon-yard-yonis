@@ -156,3 +156,8 @@ test('Stair camera glides without changing physical height and resets after a te
  for(let i=0;i<60;i++){time+=16;run(`frame(${time})`);}assert.ok(Math.abs(run('camera.position.y')-(start+.25))<.005);
  run('me.x+=20;me.y=2');time+=16;run(`frame(${time})`);assert.equal(run('stairOffset'),0);assert.ok(Math.abs(run('camera.position.y')-(start+2))<.001);run('clearTransientWorld()');
 });
+
+test('Team Deathmatch shows team scores without capture zones and names the winning team',()=>{
+ setState();run("state.mode='tdm';state.teamScores={blue:7,red:4};me.team='blue';updateCaptureObjectives(performance.now())");assert.ok(els.get('teamScore').textContent.includes('BLUE 7'));assert.equal(run('objectiveVisuals.size'),0);assert.ok(els.get('captureTimer').textContent.includes('TEAM DEATHMATCH'));
+ run("state.phase='ended';nextRosterRefresh=0;updateInterface()");assert.ok(els.get('winner').textContent.includes('BLUE TEAM WINS'));run('clearTransientWorld()');
+});
