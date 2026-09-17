@@ -4,9 +4,9 @@ const {CHARACTER_SCALE}=require('./character-config.js');
 // Static triangle BVH. Bounds only reject candidates; final tests use triangles,
 // preserving doors, arches, sloping ground and gaps in the original geometry.
 function bodyShape(p) {
- const stance=p.stance||'stand';
- const height=({stand:1.72,crouch:1.12,prone:.52,slide:.9}[stance]||1.72)*CHARACTER_SCALE;
- return {height,eye:height-.17*CHARACTER_SCALE,rx:(stance==='prone'?.78:.36)*CHARACTER_SCALE,rz:(stance==='prone'?.78:.36)*CHARACTER_SCALE};
+ const stance=p.stance||'stand',scale=p.characterScale||CHARACTER_SCALE;
+ const height=({stand:1.72,crouch:1.12,prone:.52,slide:.9}[stance]||1.72)*scale;
+ return {scale,height,eye:height-.17*scale,rx:(stance==='prone'?.78:.36)*scale,rz:(stance==='prone'?.78:.36)*scale};
 }
 class MapCollision {
  constructor(data){this.triangles=[];const v=new THREE.Vector3();for(let i=0;i<data.length;i+=9){const t=new THREE.Triangle(new THREE.Vector3(data[i],data[i+1],data[i+2]),new THREE.Vector3(data[i+3],data[i+4],data[i+5]),new THREE.Vector3(data[i+6],data[i+7],data[i+8]));this.triangles.push({index:i/9,t,b:new THREE.Box3().setFromPoints([t.a,t.b,t.c]),normal:t.getNormal(v).clone()});}this.root=this.build(this.triangles.slice());this.box=new THREE.Box3();this.point=new THREE.Vector3();this.ray=new THREE.Ray();}
@@ -36,11 +36,18 @@ class MapCollision {
   const desired=bodyShape({...p,stance:requested});
   // Always check the complete new volume, including the longer prone body.
   if(!this.blocked(p.x,p.y,p.z,desired.rx,desired.height,desired.rz))p.stance=requested;
+  if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.1)&&p.stance!=='prone'){
+   const fromSlide=p.stance==='slide';
+   p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
+   if(fromSlide){
+    // Carry most of the slide's momentum once; never add another speed boost.
+    p.vx*=.92;p.vz*=.92;
+    const exitStance=i.crouch?'crouch':'stand',exit=bodyShape({...p,stance:exitStance});
+    if(!this.blocked(p.x,p.y,p.z,exit.rx,exit.height,exit.rz))p.stance=exitStance;
+   }
+  }
   const shape=bodyShape(p),blocked=(x,y,z)=>this.blocked(x,y,z,shape.rx,shape.height,shape.rz);
   const support=(x,z,top,drop)=>this.support(x,z,top,drop,shape.rx,shape.rz);
-  if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.1)&&p.stance!=='prone'){
-   p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
-  }
   const f=Number(!!i.forward)-Number(!!i.back),s=Number(!!i.right)-Number(!!i.left),length=Math.hypot(f,s)||1;
   const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&f>0&&!i.fire?9:6;
   const tx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed;
@@ -58,10 +65,14 @@ class MapCollision {
      const blend=1-Math.exp(-(f||s?(reversing?30:20):28)*sub);
      p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
     }else if(f||s){
-     // Air steering preserves momentum; releasing a key never brakes mid-jump.
-     const blend=1-Math.exp(-2.8*sub);
-     const airSpeed=Math.max(speed,Math.hypot(p.vx,p.vz));
-     p.vx+=(tx/speed*airSpeed-p.vx)*blend;p.vz+=(tz/speed*airSpeed-p.vz)*blend;
+     // Turn the velocity vector instead of blending opposing vectors to a stop.
+     // Steering has an angular limit and cannot multiply carried slide speed.
+     const velocity=Math.hypot(p.vx,p.vz),heading=Math.atan2(p.vz,p.vx),wish=Math.atan2(tz,tx);
+     const angle=Math.atan2(Math.sin(wish-heading),Math.cos(wish-heading));
+     const turn=Math.max(-2.8*sub,Math.min(2.8*sub,angle));
+     const nextSpeed=velocity<speed?Math.min(speed,velocity+4*sub):velocity*Math.exp(-.08*sub);
+     const direction=velocity<.05?wish:heading+turn;
+     p.vx=Math.cos(direction)*nextSpeed;p.vz=Math.sin(direction)*nextSpeed;
     }else{p.vx*=Math.exp(-.12*sub);p.vz*=Math.exp(-.12*sub);}
    }
    for(const axis of ['x','z']){

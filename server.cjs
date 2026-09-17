@@ -10,6 +10,11 @@ const ROUND = Math.max(1000, Number(process.env.ROUND_MS) || 210000);
 const RESPAWN = 5000;
 const players = new Map();
 const clients = new Map();
+const {CaptureMode}=require('./capture-mode.cjs');
+const capture=new CaptureMode();let gameMode='capture',finishedMode=null,finishedCapture=null;
+function teammates(a,b){return gameMode==='capture'&&a?.team&&a.team===b?.team;}
+function assignTeam(p){const count={blue:0,red:0};for(const q of players.values())if(q!==p&&count[q.team]!==undefined)count[q.team]++;p.team=count.blue<=count.red?'blue':'red';}
+function setGameMode(mode,requester){if(requester!==host||phase==='playing'||!['capture','deathmatch'].includes(mode))return false;gameMode=mode;capture.reset();let n=0;for(const p of players.values()){p.team=mode==='capture'?['blue','red'][n++%2]:null;p.captures=0;}return true;}
 
 const WEAPONS = {
   pistol: {
@@ -74,7 +79,7 @@ function changeMap(id,requester){
  if(id===mapId())return true;
  const next=worlds[id],collision=collisionFor(next.MAP);
  ({BLOCKS,DECOR,PROPS,AREAS,SPAWNS,MAP}=next);mapCollision=collision;mapEpoch++;
- phase='lobby';roundEnd=0;grenades=[];smokes=[];roundResults=[];mapVotes.clear();
+ phase='lobby';roundEnd=0;capture.reset();grenades=[];smokes=[];roundResults=[];mapVotes.clear();
  for(const p of players.values()){p.readyEpoch=-1;p.input={};p.kills=p.deaths=p.damage=0;p.gearReadyAt=[0,0];spawn(p,Date.now());}
  broadcast({type:'mapChanged',mapId:mapId(),mapEpoch,world:currentWorld()});return true;
 }
@@ -148,7 +153,7 @@ function blocked(x,y,z,radius=.36*CHARACTER_SCALE) {
 }
 
 function spawn(p, now) {
-  const enemies = [...players.values()].filter(q => q !== p && q.hp > 0);
+  const enemies = [...players.values()].filter(q => q !== p && q.hp > 0 && !teammates(p,q));
   const ranked = SPAWNS.filter(s=>!blocked(s[0],groundAt(s[0],s[1]),s[1])).map(s => ({
     s,
     distance: spawnSafety(s, enemies)
@@ -161,7 +166,7 @@ function spawn(p, now) {
 
   if(MAP?.id==='village'){p.yaw=Math.atan2(s[0],s[1]);p.pitch=0;}
   Object.assign(p, {
-    spawnSeq:(p.spawnSeq||0)+1,
+    spawnSeq:(p.spawnSeq||0)+1,characterScale:CHARACTER_SCALE/(MAP?.id==='subzero'?1.3:1),
     x: s[0], y: groundAt(s[0],s[1]), ground: true, z: s[1], vy: 0,
     vx:0,vz:0,stance:'stand',motionTime:0,slideUntil:0,slideReadyAt:0,jumpHeld:false,crouchHeld:false,jumpUntil:-1,lastGroundAt:-100,
     hp: 100, aliveAt: 0, shield: now + 1500,
@@ -238,9 +243,9 @@ function shoot(p, now) {
   const right={x:Math.cos(p.yaw),z:-Math.sin(p.yaw)};
 
   const o={
-    x:eye.x+(right.x*.18+forward.x*.45)*CHARACTER_SCALE,
-    y:eye.y+(-.15+forward.y*.45)*CHARACTER_SCALE,
-    z:eye.z+(right.z*.18+forward.z*.45)*CHARACTER_SCALE
+    x:eye.x+(right.x*.18+forward.x*.45)*(p.characterScale||CHARACTER_SCALE),
+    y:eye.y+(-.15+forward.y*.45)*(p.characterScale||CHARACTER_SCALE),
+    z:eye.z+(right.z*.18+forward.z*.45)*(p.characterScale||CHARACTER_SCALE)
   };
 
   const mx=o.x-eye.x,my=o.y-eye.y,mz=o.z-eye.z;
@@ -274,7 +279,7 @@ function shoot(p, now) {
     let victim = null, headshot = false;
 
     for (const q of players.values()) {
-      if (q === p || q.hp <= 0 || q.shield > now) continue;
+      if (q === p || q.hp <= 0 || q.shield > now || teammates(p,q)) continue;
 
       const {head,body}=playerHit(q,o,d);
 
@@ -286,10 +291,13 @@ function shoot(p, now) {
       }
     }
 
+    const impactSurface=victim?"player":surfaceAt(o,d,distance);
+    const normal=!victim&&mapCollision?.lastTriangle?mapCollision.lastTriangle.normal:null;
+    const facing=normal&&(normal.x*d.x+normal.y*d.y+normal.z*d.z)>0?-1:1;
     shots.push({
       x: o.x + d.x * distance,
       y: o.y + d.y * distance,
-      z: o.z + d.z * distance, surface:victim?"player":surfaceAt(o,d,distance)
+      z: o.z + d.z * distance, surface:impactSurface,normal:normal?{x:normal.x*facing,y:normal.y*facing,z:normal.z*facing}:null
     });
 
     if (victim) {
@@ -315,20 +323,20 @@ function shoot(p, now) {
 }
 
 function playerEye(p){const h=bodyShape(p).eye;return {x:p.x,y:p.y+h,z:p.z};}
-function playerHead(p){const h=bodyShape(p).height;return {x:p.x-(p.stance==='prone'?Math.sin(p.yaw)*.48*CHARACTER_SCALE:0),y:p.y+h-.2*CHARACTER_SCALE,z:p.z-(p.stance==='prone'?Math.cos(p.yaw)*.48*CHARACTER_SCALE:0)};}
-function playerBounds(p){const h=bodyShape(p);return {lo:{x:p.x-h.rx,y:p.y+.04*CHARACTER_SCALE,z:p.z-h.rz},hi:{x:p.x+h.rx,y:p.y+(p.stance==='prone'?h.height:h.height-.4*CHARACTER_SCALE),z:p.z+h.rz}};}
+function playerHead(p){const h=bodyShape(p).height;return {x:p.x-(p.stance==='prone'?Math.sin(p.yaw)*.48*(p.characterScale||CHARACTER_SCALE):0),y:p.y+h-.2*(p.characterScale||CHARACTER_SCALE),z:p.z-(p.stance==='prone'?Math.cos(p.yaw)*.48*(p.characterScale||CHARACTER_SCALE):0)};}
+function playerBounds(p){const h=bodyShape(p);return {lo:{x:p.x-h.rx,y:p.y+.04*(p.characterScale||CHARACTER_SCALE),z:p.z-h.rz},hi:{x:p.x+h.rx,y:p.y+(p.stance==='prone'?h.height:h.height-.4*(p.characterScale||CHARACTER_SCALE)),z:p.z+h.rz}};}
 function playerHit(p,o,d){
- const head=raySphere(o,d,playerHead(p),Math.min(.24*CHARACTER_SCALE,bodyShape(p).height*.28));
+ const head=raySphere(o,d,playerHead(p),Math.min(.24*(p.characterScale||CHARACTER_SCALE),bodyShape(p).height*.28));
  if(p.stance==='prone'){
   const c=Math.cos(p.yaw),s=Math.sin(p.yaw),x=o.x-p.x,z=o.z-p.z;
   const origin={x:c*x-s*z,y:o.y-p.y,z:s*x+c*z};
   const direction={x:c*d.x-s*d.z,y:d.y,z:s*d.x+c*d.z};
-  return {head,body:rayBox(origin,direction,{x:-.3*CHARACTER_SCALE,y:.04*CHARACTER_SCALE,z:-.35*CHARACTER_SCALE},{x:.3*CHARACTER_SCALE,y:.3*CHARACTER_SCALE,z:.78*CHARACTER_SCALE})};
+  return {head,body:rayBox(origin,direction,{x:-.3*(p.characterScale||CHARACTER_SCALE),y:.04*(p.characterScale||CHARACTER_SCALE),z:-.35*(p.characterScale||CHARACTER_SCALE)},{x:.3*(p.characterScale||CHARACTER_SCALE),y:.3*(p.characterScale||CHARACTER_SCALE),z:.78*(p.characterScale||CHARACTER_SCALE)})};
  }
  const bounds=playerBounds(p);return {head,body:rayBox(o,d,bounds.lo,bounds.hi)};
 }
 function applyDamage(attacker,victim,amount,now,gun,head=false,origin=null){
- if(victim.hp<=0||victim.shield>now)return;
+ if(victim.hp<=0||victim.shield>now||attacker!==victim&&teammates(attacker,victim))return;
  const dealt=Math.min(victim.hp,Math.max(0,Math.round(amount)));
  if(attacker&&attacker!==victim)attacker.damage+=dealt;
  victim.hp-=dealt;
@@ -366,7 +374,7 @@ function throwGrenade(p, index, now) {
   grenades.push({
     id: ++serial, owner: p.id,
     kind: p.grenadeLoadout[index],
-    x: p.x, y: p.y + bodyShape(p).eye-.08*CHARACTER_SCALE, z: p.z,
+    x: p.x, y: p.y + bodyShape(p).eye-.08*(p.characterScale||CHARACTER_SCALE), z: p.z,
     vx: d.x * 16, vy: d.y * 16 + 3, vz: d.z * 16,
     explodeAt: now + 1350
   });
@@ -513,6 +521,7 @@ function startRound() {
   phase = "playing";
   roundResults=[];mapVotes.clear();
   roundEnd = now + ROUND;
+  if(gameMode==='capture'){let n=0;for(const p of players.values()){p.team=['blue','red'][n++%2];p.captures=0;}capture.start(now,SPAWNS.map(s=>({x:s[0],y:groundAt(s[0],s[1]),z:s[1]})));}else capture.reset();
   grenades = [];
   smokes = [];
 
@@ -526,7 +535,7 @@ function startRound() {
 
 function publicPlayer(p) {
   return {
-    id: p.id, name: p.name, skin: p.skin, spawnSeq:p.spawnSeq||0,
+    id: p.id, name: p.name, team:p.team||null,captures:p.captures||0, skin: p.skin, characterScale:p.characterScale||CHARACTER_SCALE, spawnSeq:p.spawnSeq||0,
     x: p.x, y: p.y, z: p.z,
     yaw: p.yaw, pitch: p.pitch,
     hp: p.hp, kills: p.kills, deaths: p.deaths,
@@ -670,6 +679,7 @@ wss.on("connection", ws => {
         kills: 0, deaths: 0, damage: 0
       };
 
+      if(gameMode==='capture')assignTeam(p);
       spawn(p, now);p.readyEpoch=-1;p.shield=Number.MAX_SAFE_INTEGER;
       players.set(id, p);
       clients.set(id, ws);
@@ -683,6 +693,7 @@ wss.on("connection", ws => {
     const p = players.get(id);
     if (!p) return;
 
+    if(m.type==='mode'){if(!setGameMode(m.mode,id))send(ws,{type:'error',message:'Only the host can change modes between rounds.'});return;}
     if(m.type==='voteMap'){if(phase==='ended'&&Object.hasOwn(worlds,m.mapId))mapVotes.set(id,m.mapId);return;}
     if(m.type==='mapReady') {if(m.mapId===mapId()&&m.mapEpoch===mapEpoch&&p.readyEpoch!==mapEpoch){p.readyEpoch=mapEpoch;p.shield=Date.now()+1500;}return;}
     if(m.type==='map') {if(!changeMap(m.mapId,id))send(ws,{type:'error',message:'Only the host can change maps between rounds.'});return;}
@@ -732,7 +743,7 @@ wss.on("connection", ws => {
     if (p) event({ kind: "notice", message: `${p.name} left the arena` });
 
     if (!players.size) {
-      phase = "lobby";roundResults=[];mapVotes.clear();
+      phase = "lobby";capture.reset();roundResults=[];mapVotes.clear();
       grenades = [];
       smokes = [];
     }
@@ -748,8 +759,12 @@ setInterval(() => {
   const dt = Math.min((now - previousTick) / 1000, 0.1);
   previousTick = now;
 
+  if(phase==='playing'&&gameMode==='capture')capture.tick(Math.min(now,roundEnd-1),Math.max(0,Math.min(dt,(roundEnd-(now-dt*1000))/1000)),[...players.values()],(p,point)=>{
+   if(p.readyEpoch!==mapEpoch||p.shield>now)return false;
+   if(!mapCollision)return true;const o=playerEye(p),d={x:point.x-o.x,y:point.y+.5-o.y,z:point.z-o.z},len=Math.hypot(d.x,d.y,d.z);if(len<.1)return true;d.x/=len;d.y/=len;d.z/=len;return mapCollision.distance(o,d,len)>=len-.08;
+  });
   if (phase === "playing" && now >= roundEnd) {
-    phase = "ended";
+    phase = "ended";finishedMode=gameMode;finishedCapture=gameMode==='capture'?JSON.parse(JSON.stringify(capture.state())):null;
     roundResults=[...players.values()].map(publicPlayer);
     grenades = [];
     event({ kind: "round", message: "ROUND COMPLETE" });
@@ -830,7 +845,7 @@ for(const g of grenades) {
     const p = players.get(id);
     send(ws, {
       type: "state",
-      now, phase, end: roundEnd, host, mapId:mapId(),mapEpoch,readyCount:[...players.values()].filter(p=>p.readyEpoch===mapEpoch).length,
+      now, phase, mode:phase==='ended'?finishedMode:gameMode,nextMode:gameMode,capture:phase==='ended'?finishedCapture:gameMode==='capture'?capture.state():null,end: roundEnd, host, mapId:mapId(),mapEpoch,readyCount:[...players.values()].filter(p=>p.readyEpoch===mapEpoch).length,
       players: list, grenades, smokes,
       results:phase==='ended'?roundResults:[],mapVotes:Object.fromEntries(mapCatalog.map(m=>[m.id,[...mapVotes.values()].filter(v=>v===m.id).length])),myVote:mapVotes.get(id)||null,
       self: {
@@ -922,7 +937,12 @@ function spawnSafety(s,enemies) {
 }
 
 function surfaceAt(o,d,dist) {
- if(mapCollision)return dist<150?'concrete':'air';
+ if(mapCollision){
+  if(dist>=150){mapCollision.lastTriangle=null;return 'air';}
+  mapCollision.distance(o,d,dist+.025);
+  mapCollision.impactTags ||= fs.readFileSync(path.join(__dirname,'public/maps',MAP.id+'-impacts.bin'));
+  return ['concrete','snow','wood','metal','brick','plaster','tile'][mapCollision.impactTags[mapCollision.lastTriangle?.index]||0];
+ }
  for(const b of BLOCKS) {
  const hit=rayBox(o,d,{x:b.x-b.w/2,y:b.y,z:b.z-b.d/2},{x:b.x+b.w/2,y:b.y+b.h,z:b.z+b.d/2});
  if(Math.abs(hit-dist)<.015)return b.mat;

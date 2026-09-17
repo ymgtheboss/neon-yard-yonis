@@ -16,10 +16,10 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
  ws=new WS(target.webSocketDebuggerUrl);await new Promise(r=>ws.once('open',r));ws.on('message',raw=>{const m=JSON.parse(raw);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);});
  await call('Runtime.enable');await call('Page.enable');
  await call('Page.addScriptToEvaluateOnNewDocument',{source:"window.__socketCloses=[];const NativeSocket=window.WebSocket;window.WebSocket=class extends NativeSocket{constructor(...args){super(...args);this.addEventListener('close',e=>window.__socketCloses.push({code:e.code,reason:e.reason}));}};"});
- if(process.argv.includes('--presentation')){
+ if(process.argv.includes('--presentation')||process.argv.includes('--operators')){
   await call('Fetch.enable',{patterns:[{urlPattern:'http://127.0.0.1:'+port+'/',requestStage:'Request'}]});
   ws.on('message',async raw=>{const m=JSON.parse(raw);if(m.method!=='Fetch.requestPaused')return;try{
-   const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace('</script>\n</body>',fs.readFileSync(path.join(__dirname,'presentation-hook.js'),'utf8')+'\n</script>\n</body>');
+   const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace('</script>\n</body>',fs.readFileSync(path.join(__dirname,process.argv.includes('--operators')?'operator-hook.js':'presentation-hook.js'),'utf8')+'\n</script>\n</body>');
    await call('Fetch.fulfillRequest',{requestId:m.params.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'text/html'}],body:Buffer.from(html).toString('base64')});
   }catch(e){errors.push(String(e));}});
  }
@@ -27,10 +27,20 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
  await until(()=>evaluate(`document.getElementById('joinMessage')?.textContent==='${villageTest?'Bellhaven':'Subzero'} ready'`),'Subzero GLB, textures and collision loading');
  await until(()=>evaluate("window.weaponAssets?.loaded===10"),'all ten imported weapon models');
  await evaluate("document.getElementById('quality').value='performance';document.getElementById('quality').onchange()");
- if(process.argv.includes('--presentation'))await call('Fetch.disable');
+ if(process.argv.includes('--presentation')||process.argv.includes('--operators'))await call('Fetch.disable');
  assert.deepEqual(await evaluate('window.weaponAssets.errors'),[]);
  if(process.argv.includes('--presentation')){fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});const data=await evaluate('window.renderPresentationGallery()');fs.writeFileSync(path.join(__dirname,'artifacts/reload-gallery.png'),Buffer.from(data,'base64'));console.log('PASS actual first-person reload poses render for six weapon families');await call('Page.navigate',{url:`http://127.0.0.1:${port}`});await until(()=>evaluate("document.getElementById('joinMessage')?.textContent==='Subzero ready'&&window.weaponAssets?.loaded===10"),'fresh production page after pose capture');}
 
+ if(process.argv.includes('--operators')){
+  fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});
+  const data=await evaluate('window.operatorGallery()');fs.writeFileSync(path.join(__dirname,'artifacts/human-operators.png'),Buffer.from(data,'base64'));
+  await evaluate('window.testKillcam()');await delay(350);
+  assert.equal(await evaluate("!document.getElementById('killcam').classList.contains('hidden')"),true);
+  const shot=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'artifacts/killcam.png'),Buffer.from(shot.data,'base64'));
+  await evaluate("document.getElementById('skipKillcam').click();window.endTestKillcam();window.location.reload()");
+  await until(()=>evaluate("document.getElementById('joinMessage')?.textContent==='Subzero ready'"),'production page after replay');
+  assert.deepEqual(errors,[]);console.log('PASS twelve human outfits, recorded killer-view rendering, replay skip, and production-page reload');return;
+ }
  if(process.argv.includes('--menu')){
   fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});
   if(process.argv.includes('--build-previews')){

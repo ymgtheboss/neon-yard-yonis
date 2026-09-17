@@ -23,7 +23,8 @@ class Element {
 const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const els=new Map();for(const m of html.matchAll(/<([\w]+)[^>]*id="([^"]+)"[^>]*>/g)){const e=new Element(m[1]);e.id=m[2];if(m[0].includes('hidden'))e.classes.add('hidden');els.set(m[2],e)}
 els.get('reloadTrack').append(new Element());
-const document={body:new Element('body'),head:new Element('head'),createElement:t=>new Element(t),getElementById:id=>els.get(id),addEventListener(){},exitPointerLock(){},pointerLockElement:null};
+const handlers={};
+const document={body:new Element('body'),head:new Element('head'),createElement:t=>new Element(t),getElementById:id=>els.get(id),addEventListener(name,fn){(handlers[name]||=[]).push(fn);},exitPointerLock(){},pointerLockElement:null};
 class Renderer{constructor(){this.domElement=new Element('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>4};this.info={render:{calls:0}}}setSize(){}setPixelRatio(v){this.pixelRatio=v}render(scene,camera){scene.updateMatrixWorld();camera.updateMatrixWorld()}clearDepth(){}}
 let time=1000;const local=new Map();const intervals=[];
 const context={...require('../combat-visuals.mjs'),URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,WORLD:world,MAP_CATALOG:require('../map-catalog.cjs').catalog,MAP_EPOCH:0,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
@@ -117,4 +118,41 @@ test('Rapid hits accumulate damage only for the same target and reset cleanly',(
  assert.equal(els.get('hitConfirm').textContent,'30 DMG');
  run("onEvent({kind:'hit',amount:9,victim:'A',victimId:'two'})");assert.equal(els.get('hitConfirm').textContent,'9 DMG');
  run('clearTransientWorld()');assert.equal(run('hitDamage'),0);
+});
+
+test('Killcam replays stored positions, supports skipping, and clears on respawn',()=>{
+ setState();run("mapRoot=new THREE.Group();me=state.players[0];state.phase='playing';me.hp=0;me.spawnSeq=10;myId=me.id;snapshots.length=0;const sample=state.players.map(p=>({...p,hp:100,spawnSeq:10}));rememberSnapshot({...state,now:100,players:sample});rememberSnapshot({...state,now:1200,players:sample.map(p=>({...p,x:p.x+1}))});startKillcam({killerId:sample[1].id,killer:'Remote',gun:'rifle'});");
+ assert.equal(run('killReplay.frames.length'),2);assert.equal(run('renderKillcam(performance.now()+200,.016)'),true);
+ assert.equal(els.get('killcam').classList.contains('hidden'),false);
+ run('stopKillcam()');assert.equal(run('killReplay'),null);
+ run("startKillcam({killerId:state.players[1].id,killer:'Remote',gun:'rifle'});me.spawnSeq++");
+ assert.equal(run('renderKillcam(performance.now(),.016)'),false);assert.equal(run('killReplay'),null);run('clearTransientWorld();mapRoot=null');
+});
+
+test('Hold/toggle aiming and separate scoped sensitivity affect actual mouse input',()=>{
+ setState();run("mapReady=true;document.pointerLockElement=renderer.domElement;show('menu',false);show('room',false);show('board',false);show('settings',false);settings.aimMode='toggle';aim=false;state.self.reloadAt=0;state.self.guns[0]='rifle';state.self.slot=0;settings.sensitivity=1;settings.aimSensitivity=.4;settings.scopeSensitivity=.2;yaw=0");
+ for(const fn of handlers.mousedown)fn({button:2});for(const fn of handlers.mouseup)fn({button:2});assert.equal(run('aim'),true);
+ for(const fn of handlers.mousemove)fn({movementX:10,movementY:0});assert.ok(Math.abs(run('yaw')+.008)<1e-9);
+ run("state.self.guns[0]='sniper';yaw=0");for(const fn of handlers.mousemove)fn({movementX:10,movementY:0});assert.ok(Math.abs(run('yaw')+.004)<1e-9);
+ for(const fn of handlers.mousedown)fn({button:2});assert.equal(run('aim'),false);
+ run("settings.aimMode='hold'");for(const fn of handlers.mousedown)fn({button:2});for(const fn of handlers.mouseup)fn({button:2});assert.equal(run('aim'),false);run('document.pointerLockElement=null;clearTransientWorld()');
+});
+test('Empty reload drops one visible magazine and temporary marks are bounded and cleaned',()=>{
+ setState();run("buildGun('rifle');state.self.guns[0]='rifle';state.self.slot=0;state.self.ammo[0]=0;state.self.reloadAt=serverNow()+WEAPONS.rifle.reload*1000*.55;upgradeFrame(.016,performance.now())");assert.equal(run('droppedMagazines.length'),1);assert.equal(run('droppedMagazines[0].mesh.visible'),true);
+ run('upgradeFrame(.016,performance.now())');assert.equal(run('droppedMagazines.length'),1);
+ run("for(let i=0;i<90;i++)impact({x:0,y:1,z:0,surface:'wood',normal:{x:0,y:0,z:1}},{x:0,y:1,z:2})");assert.ok(run('bulletMarks.length')<=64);assert.ok(run('impactParticles.length')<=180);
+ run('clearTransientWorld()');assert.equal(run('bulletMarks.length+droppedMagazines.length'),0);
+});
+
+test('Capture HUD shows three objectives and team results override individual kills',()=>{
+ setState();run("state.mode='capture';state.phase='playing';me.team='blue';state.capture={wave:1,nextMove:serverNow()+60000,scores:{blue:42,red:21},points:['A','B','C'].map((id,i)=>({id,x:i*10,y:0,z:0,radius:3,owner:i===0?'blue':null,progress:i===0?-100:0}))};updateCaptureObjectives(performance.now())");
+ assert.equal(els.get('captureCards').children.length,3);assert.ok(els.get('teamScore').textContent.includes('42'));assert.ok(els.get('captureTimer').textContent.includes('60s'));
+ run("state.phase='ended';nextRosterRefresh=0;updateInterface();updateCaptureObjectives(performance.now())");assert.ok(els.get('winner').textContent.includes('BLUE TEAM WINS'));assert.equal(run('objectiveVisuals.size'),0);run('clearTransientWorld()');
+});
+
+test('Stair camera glides without changing physical height and resets after a teleport',()=>{
+ setState();run('predicted=null;cameraReady=false;me.ground=true;me.y=0;me.vy=0;settings.motion="no"');time+=16;run(`frame(${time})`);const start=run('camera.position.y');
+ run('me.y=.25');time+=16;run(`frame(${time})`);const delta=run('camera.position.y')-start;assert.ok(delta>0&&delta<.1);assert.equal(run('me.y'),.25);
+ for(let i=0;i<60;i++){time+=16;run(`frame(${time})`);}assert.ok(Math.abs(run('camera.position.y')-(start+.25))<.005);
+ run('me.x+=20;me.y=2');time+=16;run(`frame(${time})`);assert.equal(run('stairOffset'),0);assert.ok(Math.abs(run('camera.position.y')-(start+2))<.001);run('clearTransientWorld()');
 });

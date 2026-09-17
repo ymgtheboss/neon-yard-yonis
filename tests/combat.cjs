@@ -47,4 +47,24 @@ test('Movement converges across 30, 60 and 120 Hz updates',()=>{
  const results=[30,60,120].map(hz=>{const a=p('a',6,10);a.input={forward:true,sprint:true};for(let i=0;i<hz/2;i++)collision.move(a,1/hz);return a;});
  for(const a of results){assert.ok(Math.abs(a.z-results[0].z)<.045);assert.ok(Math.abs(a.vz-results[0].vz)<.01);}
 });
+test('Smaller bodies retain the same jump apex while reducing collision dimensions',()=>{
+ const normal=p('a',6,10),small=p('b',6,10);small.characterScale=CHARACTER_SCALE/1.3;
+ assert.ok(Math.abs(bodyShape(small).height*1.3-bodyShape(normal).height)<1e-9);
+ assert.ok(Math.abs(bodyShape(small).rx*1.3-bodyShape(normal).rx)<1e-9);
+ normal.input=small.input={jump:true};let high=0,low=0;for(let i=0;i<90;i++){collision.move(normal,1/60);collision.move(small,1/60);high=Math.max(high,normal.y);low=Math.max(low,small.y);}
+ assert.ok(Math.abs(high-low)<1e-9);assert.ok(high>1);
+});
+test('Capture teammates cannot damage each other, but enemies and self explosions still can',()=>{
+ reset();const a=p('a'),b=p('b');a.team=b.team='blue';add(a);add(b);e.applyDamage(a,b,40,10000,'rifle');assert.equal(b.hp,100);b.team='red';e.applyDamage(a,b,40,10000,'rifle');assert.equal(b.hp,60);e.applyDamage(a,a,20,10000,'frag');assert.equal(a.hp,80);
+});
+test('Air steering turns smoothly, preserves speed and cannot stack speed through circling',()=>{
+ const a=p('a',6,10);a.y=1000;a.ground=false;a.vz=-9;a.vx=0;a.input={forward:true,right:true,sprint:true};step(a,12);
+ assert.ok(a.vx>2);assert.ok(a.vz<0);assert.ok(Math.hypot(a.vx,a.vz)>8.8);assert.ok(Math.hypot(a.vx,a.vz)<=9.001);
+ for(let i=0;i<240;i++){a.yaw+=.08;collision.move(a,1/60);assert.ok(Math.hypot(a.vx,a.vz)<=9.001);}
+});
+test('Slide jumping carries momentum once and retains the ordinary jump apex',()=>{
+ const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,30);a.input.slide=true;step(a,1);const entry=Math.hypot(a.vx,a.vz);a.input.jump=true;step(a,1);
+ assert.equal(a.stance,'stand');assert.equal(a.slideUntil,0);assert.ok(!a.ground);assert.ok(Math.hypot(a.vx,a.vz)>entry*.9);assert.ok(Math.hypot(a.vx,a.vz)<entry);
+ let apex=a.y;for(let i=0;i<70;i++){collision.move(a,1/60);apex=Math.max(apex,a.y);}const normal=p('n',10,10);normal.input={jump:true};let ordinary=0;for(let i=0;i<71;i++){collision.move(normal,1/60);ordinary=Math.max(ordinary,normal.y);}assert.ok(Math.abs(apex-ordinary)<.005);
+});
 console.log(`${count} combat upgrade checks passed.`);

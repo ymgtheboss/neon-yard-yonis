@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),{CaptureMode}=require('../capture-mode.cjs');
+const sites=Array.from({length:12},(_,i)=>({x:(i%4)*12,y:0,z:Math.floor(i/4)*12}));
+const c=new CaptureMode();c.start(1000,sites);assert.equal(c.points.length,3);assert.equal(new Set(c.points.map(p=>p.site)).size,3);
+const spot=c.points[0],blue={...spot,hp:100,team:'blue'},red={...spot,hp:100,team:'red'};
+for(let n=0;n<50;n++)c.tick(1000+n*100,.1,[blue]);assert.equal(spot.owner,'blue');assert.equal(blue.captures,1);
+const held=c.scores.blue;c.tick(7000,1,[]);assert.equal(c.scores.blue,held+1);
+const score=c.scores.blue,progress=spot.progress;c.tick(8000,1,[blue,red]);assert.equal(spot.contested,true);assert.equal(spot.progress,progress);assert.equal(c.scores.blue,score);
+for(let n=0;n<100;n++)c.tick(9000+n*100,.1,[red]);assert.equal(spot.owner,'red');assert.equal(red.captures,1);
+const before=spot.progress;c.tick(20000,1,[{...blue,hp:0}]);assert.equal(spot.progress,before);c.tick(21000,1,[blue],()=>false);assert.equal(spot.progress,before);
+const old=c.points.map(p=>p.site);c.tick(60999,0,[]);assert.deepEqual(c.points.map(p=>p.site),old);c.tick(61000,0,[]);assert.ok(c.points.every(p=>!old.includes(p.site)&&p.owner===null&&p.progress===0));assert.equal(c.nextMove,121000);assert.ok(c.scores.blue>0&&c.scores.red>0);
+c.tick(181000,0,[]);assert.equal(c.nextMove,241000);c.reset();assert.equal(c.points.length,0);assert.equal(c.scores.blue+c.scores.red,0);
+console.log('PASS three zones, capture, holding score, contesting, takeover, dead/blocked exclusion, exact 60-second relocation, fresh sites, and reset');

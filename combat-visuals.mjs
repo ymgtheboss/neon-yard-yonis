@@ -69,28 +69,54 @@ export function createWeaponKit(id,color='#6ad6d2'){
  return root;
 }
 export const SKIN_STYLES={
- cyan:{name:'ION / Recon',base:'#25404c',armor:'#57d9d7',trim:'#cdf8ef',helmet:0},sunset:{name:'DUNE / Ranger',base:'#624e3d',armor:'#d5915c',trim:'#f5d6a6',helmet:1},violet:{name:'PHANTOM / Infiltrator',base:'#373447',armor:'#9e86cb',trim:'#e4d5ff',helmet:2},lime:{name:'VIPER / Scout',base:'#303d2f',armor:'#99b365',trim:'#dbe9b4',helmet:0},rose:{name:'SAKURA / Medic',base:'#443944',armor:'#bc7d96',trim:'#f8e6ef',helmet:1},ice:{name:'POLAR / Sentinel',base:'#617079',armor:'#d7e3e6',trim:'#7ad8ed',helmet:2},obsidian:{name:'ONYX / Breacher',base:'#202834',armor:'#535e73',trim:'#e5a765',helmet:2},desert:{name:'NOMAD / Pathfinder',base:'#695747',armor:'#c4a275',trim:'#e9d4ad',helmet:1},woodland:{name:'FERN / Tracker',base:'#34483a',armor:'#7d9463',trim:'#c4cd8e',helmet:0},ember:{name:'CINDER / Assault',base:'#423b37',armor:'#be6146',trim:'#f4c37c',helmet:2},arctic:{name:'GLACIER / Marksman',base:'#4c6576',armor:'#b2cfdf',trim:'#e6f4fb',helmet:1},royal:{name:'REGENT / Elite',base:'#302a43',armor:'#8268b3',trim:'#e2c28e',helmet:0}
+ cyan:{name:'RECON / Field Operator',base:'#354851',armor:'#637763',trim:'#d4c8a7',hat:'helmet',outfit:'vest',skin:'#bc8a69'},
+ sunset:{name:'RANGER / Outback',base:'#8a6749',armor:'#c7a071',trim:'#edddba',hat:'hat',outfit:'rolled',skin:'#d7a77e'},
+ violet:{name:'RUNNER / Streetwear',base:'#4e445d',armor:'#b0a3b9',trim:'#ece6e0',hat:'hood',outfit:'hoodie',skin:'#78543f'},
+ lime:{name:'SCOUT / Light Infantry',base:'#596346',armor:'#849371',trim:'#c8c1a0',hat:'cap',outfit:'rolled',skin:'#e0b38d'},
+ rose:{name:'MEDIC / Rescue',base:'#e6dfce',armor:'#a84443',trim:'#f4efdf',hat:'ponytail',outfit:'medic',skin:'#a56e50'},
+ ice:{name:'ALPINE / Mountain Patrol',base:'#c5cacc',armor:'#717d87',trim:'#ecebe1',hat:'beanie',outfit:'parka',skin:'#cfa07c'},
+ obsidian:{name:'BREACHER / Tactical',base:'#252b32',armor:'#414952',trim:'#9da4a4',hat:'helmet',outfit:'heavy',skin:'#71503e'},
+ desert:{name:'NOMAD / Expedition',base:'#a79473',armor:'#6f654f',trim:'#d8cbb0',hat:'scarf',outfit:'pack',skin:'#ae7c58'},
+ woodland:{name:'TRACKER / Woodland',base:'#475c41',armor:'#887b54',trim:'#c6b798',hat:'hat',outfit:'pack',skin:'#b88563'},
+ ember:{name:'MECHANIC / Workshop',base:'#985c37',armor:'#3d4249',trim:'#dec8a0',hat:'mohawk',outfit:'overalls',skin:'#d3a17c'},
+ arctic:{name:'MARKSMAN / Winter',base:'#aab9bf',armor:'#e1e1d7',trim:'#6a828b',hat:'hood',outfit:'longcoat',skin:'#805a43'},
+ royal:{name:'OFFICER / Command',base:'#34425b',armor:'#697486',trim:'#c9ac68',hat:'beret',outfit:'coat',skin:'#bf916f'}
 };
 export function createOperatorRig(p){
  const style=SKIN_STYLES[p.skin]||SKIN_STYLES.cyan,base=mat(style.base,.05),armor=mat(style.armor,.35),trim=mat(style.trim,.4);
- const root=new THREE.Group();root.scale.setScalar(CHARACTER_SCALE);const hips=pivot(root,0,.79,0),torso=pivot(hips,0,.15,0);
- ball(hips,0,0,0,.25,.14,.16,base);box(hips,0,.04,0,.48,.07,.33,M.rubber);
- // Tapered torso, layered chest/back plates, collar and asymmetric radio pack.
- ball(torso,0,.16,0,.26,.29,.16,base);box(torso,0,.2,-.14,.39,.36,.065,armor,.06);box(torso,0,.2,.15,.38,.38,.075,armor);
- for(const side of [-1,1])box(torso,side*.2,.3,-.1,.045,.3,.04,M.rubber);
- for(let n=0;n<3;n++){box(torso,(n-1)*.13,.07,-.205,.105,.13,.065,base);box(torso,(n-1)*.13,.13,-.242,.11,.023,.018,trim);}
- box(torso,.26,.28,.07,.09,.14,.085,M.dark);tube(torso,.27,.43,.08,.007,.22,M.dark,'y');
- box(torso,-.115,.33,-.19,.075,.035,.015,trim);box(torso,.115,.22,-.188,.09,.016,.012,trim);
- const head=pivot(torso,0,.55,0);ball(head,0,0,0,.16,.18,.155,mat('#a98166',.05));
- ball(head,0,.07,.014,.2,.14,.19,armor);box(head,0,.016,-.156,.32,.095,.045,M.rubber);box(head,0,.018,-.184,.255,.055,.013,mat(style.trim,.75));
- if(style.helmet===2){box(head,0,-.105,-.095,.29,.15,.16,armor);for(const x of [-.06,.06])tube(head,x,-.09,-.18,.032,.03,M.dark);}
- if(style.helmet===1){box(head,0,.08,-.18,.36,.026,.14,base);box(torso,0,.43,0,.34,.1,.3,base);}
- for(const x of [-.195,.195])tube(head,x,-.005,.012,.065,.025,M.dark,'x');
+ const root=new THREE.Group();root.scale.setScalar(p.characterScale||CHARACTER_SCALE);const hips=pivot(root,0,.79,0),torso=pivot(hips,0,.15,0);
+ const skinMat=mat(style.skin,0),hair=mat('#34271f',0),cloth=mat(style.armor,0);
+ box(hips,0,0,0,.34,.17,.24,base);box(hips,0,.065,0,.36,.055,.255,M.rubber);
+ box(torso,0,.17,0,.4,.4,.24,base);tube(torso,0,.43,0,.065,.13,skinMat,'y');
+ if(['vest','heavy','medic'].includes(style.outfit)){
+  box(torso,0,.18,-.145,.35,.32,.075,cloth);
+  for(const x of [-.11,0,.11])box(torso,x,.07,-.2,.09,.12,.06,cloth);
+ }
+ if(style.outfit==='heavy'){box(torso,0,.15,.15,.39,.39,.12,cloth);for(const x of [-.22,.22])box(torso,x,.33,0,.09,.12,.29,cloth);}
+ if(style.outfit==='medic'){box(torso,0,.28,-.188,.045,.12,.012,mat('#f1efdf',0));box(torso,0,.28,-.19,.12,.045,.012,mat('#f1efdf',0));box(hips,.24,-.02,0,.16,.2,.18,cloth);}
+ if(['coat','longcoat','parka'].includes(style.outfit)){box(torso,0,-.04,.015,.43,.22,.27,base);for(const x of [-.14,.14])box(torso,x,.08,-.132,.1,.1,.015,cloth);box(torso,0,.2,-.13,.012,.36,.015,trim);}
+ if(style.outfit==='pack'){box(torso,0,.18,.2,.31,.38,.19,cloth);for(const x of [-.14,.14])box(torso,x,.2,-.13,.035,.4,.03,cloth);tube(torso,.2,.25,.23,.045,.25,M.steel,'y');}
+ if(style.outfit==='overalls'){box(torso,0,.13,-.128,.26,.28,.025,cloth);for(const x of [-.12,.12])box(torso,x,.33,-.13,.045,.18,.025,cloth);box(hips,.23,-.05,0,.1,.18,.08,M.wood);}
+ if(style.outfit==='hoodie'){box(torso,0,-.01,-.14,.26,.1,.03,cloth);for(const x of [-.055,.055])box(torso,x,.3,-.14,.008,.12,.008,trim);}
+ const head=pivot(torso,0,.55,0);ball(head,0,0,0,.125,.165,.12,skinMat);
+ box(head,0,-.01,-.122,.036,.065,.033,skinMat);for(const x of [-.045,.045]){box(head,x,.03,-.116,.025,.012,.012,M.rubber);ball(head,x*2.9,-.005,0,.021,.044,.026,skinMat);}
+ box(head,0,-.075,-.111,.055,.009,.013,hair);ball(head,0,.105,.025,.128,.066,.115,hair);
+ if(style.hat==='helmet'){ball(head,0,.09,.025,.15,.09,.145,cloth);box(head,0,.065,-.122,.27,.025,.09,cloth);}
+ if(style.hat==='cap'){ball(head,0,.1,.02,.13,.065,.12,cloth);box(head,0,.085,-.135,.22,.018,.15,cloth);}
+ if(style.hat==='hat'){tube(head,0,.09,0,.21,.018,cloth,'y');tube(head,0,.14,.012,.123,.085,cloth,'y');}
+ if(style.hat==='beret'){const hat=ball(head,.027,.126,.016,.16,.05,.13,cloth);hat.rotation.z=-.2;box(head,-.065,.116,-.102,.032,.037,.012,trim);}
+ if(style.hat==='beanie'){ball(head,0,.125,.014,.137,.07,.127,cloth);box(head,0,.082,-.113,.23,.04,.024,cloth);}
+ if(style.hat==='hood'){ball(head,0,.06,.07,.153,.14,.12,cloth);for(const x of [-.128,.128])box(head,x,.005,.01,.035,.2,.17,cloth);}
+ if(style.hat==='scarf'){box(torso,0,.43,-.005,.25,.085,.25,cloth);box(torso,.1,.25,-.145,.075,.3,.04,cloth);}
+ if(style.hat==='ponytail')ball(head,0,.06,.17,.047,.1,.09,hair);
+ if(style.hat==='mohawk')box(head,0,.17,0,.035,.06,.2,hair);
  const legs=[],knees=[],arms=[],elbows=[];
  for(const side of [-1,1]){
-  const leg=pivot(hips,side*.155,-.015,0),knee=pivot(leg,0,-.36,0),arm=pivot(torso,side*.32,.34,0),elbow=pivot(arm,0,-.28,0);
-  ball(leg,0,-.16,0,.115,.205,.12,base);box(leg,side*.09,-.13,0,.08,.15,.14,armor);ball(knee,0,0,-.035,.1,.095,.075,armor);ball(knee,0,-.16,0,.083,.19,.09,base);box(knee,0,-.32,-.045,.19,.1,.29,M.rubber);box(knee,0,-.272,-.09,.14,.035,.15,M.steel);
-  ball(arm,0,-.025,0,.13,.11,.13,armor);ball(arm,0,-.16,0,.085,.15,.09,base);ball(elbow,0,-.02,0,.08,.07,.085,armor);ball(elbow,0,-.15,0,.073,.14,.08,base);ball(elbow,0,-.27,-.015,.075,.075,.07,M.rubber);box(arm,side*.09,-.05,-.04,.018,.055,.075,trim);
+  const leg=pivot(hips,side*.155,-.015,0),knee=pivot(leg,0,-.36,0),arm=pivot(torso,side*.265,.34,0),elbow=pivot(arm,0,-.28,0);
+  box(leg,0,-.17,0,.145,.33,.17,base);box(knee,0,-.155,0,.125,.31,.145,base);box(knee,0,-.32,-.04,.15,.1,.24,M.rubber);
+  const rolled=style.outfit==='rolled'||style.outfit==='overalls';
+  box(arm,0,-.12,0,.13,.25,.15,base);box(elbow,0,-.13,0,.105,.24,.12,rolled?skinMat:base);ball(elbow,0,-.265,-.012,.055,.065,.05,skinMat);
+  if(style.outfit==='heavy')box(knee,0,-.025,-.086,.13,.13,.04,cloth);
   legs.push(leg);knees.push(knee);arms.push(arm);elbows.push(elbow);
  }
  for(const g of [head,...legs,...knees,...arms,...elbows,torso,hips])bake(g);
@@ -99,6 +125,7 @@ export function createOperatorRig(p){
  return {root,hips,torso,head,legs,knees,arms,elbows,left:legs[0],right:legs[1],armLeft:arms[0],armRight:arms[1],weaponPivot,kit,remoteScope:{visible:false},remoteFlash:kit.userData.muzzle,shield,skin:p.skin,last:new THREE.Vector3(p.x,p.y,p.z),stride:0,stanceBlend:0};
 }
 export function animateOperator(a,p,dt,now,shotAge,reloadProgress){
+ a.root.scale.setScalar(p.characterScale||CHARACTER_SCALE);
  const stance=p.stance||'stand',prone=stance==='prone',low=stance==='crouch'||stance==='slide',slide=stance==='slide';
  const speed=Math.hypot(p.vx||0,p.vz||0),blend=1-Math.exp(-14*Math.min(dt,.1));
  const forward=-((p.vx||0)*Math.sin(p.yaw||0)+(p.vz||0)*Math.cos(p.yaw||0));
