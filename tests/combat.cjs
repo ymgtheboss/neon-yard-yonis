@@ -5,13 +5,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const root=path.join(__dirname,'..'),req=createRequire(path.join(root,'server.cjs'));
 const fakeServer={on(){return this},listen(){return this}};
 const ctx={require:n=>n==='http'?{createServer:()=>fakeServer}:n==='ws'?{WebSocketServer:class extends EventEmitter{},WebSocket:{OPEN:1}}:req(n),console,process:{env:{},exit(){throw Error('Unexpected exit')}},__dirname:root,setInterval(){},Date,Math};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'server.cjs'),'utf8')+'\nglobalThis.e={WEAPONS,SKINS,players,clients,spawn,shoot,applyDamage,startRound,cleanGrenades,throwGrenade,refreshEquipment,detonate,changeLoadout,playerHit,playerEye,publicPlayer,getGrenades:()=>grenades};',ctx);const e=ctx.e;
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'server.cjs'),'utf8')+'\nglobalThis.e={WEAPONS,SKINS,players,clients,spawn,shoot,requestShot,finishShotRequest,applyDamage,startRound,cleanGrenades,throwGrenade,refreshEquipment,detonate,changeLoadout,playerHit,playerEye,publicPlayer,getGrenades:()=>grenades};',ctx);const e=ctx.e;
 function p(id,x=3,z=20){return {id,name:id,skin:'cyan',x,y:0,z,yaw:0,pitch:0,vy:0,ground:true,hp:100,shield:0,input:{aim:true},loadout:['rifle','pistol'],grenadeLoadout:['frag','medkit'],guns:['rifle','pistol'],slot:0,ammo:[30,12],reloadAt:0,nextShot:0,kills:0,deaths:0,damage:0,grenades:[true,true],streak:0,flashUntil:0};}
 function reset(){e.players.clear();e.clients.clear();}
 function add(p){const messages=[];e.players.set(p.id,p);e.clients.set(p.id,{readyState:1,send:s=>messages.push(JSON.parse(s))});return messages;}
 let count=0;function test(name,fn){fn();count++;console.log('PASS',name);}
 test('Ten distinct weapons and twelve cosmetic skin choices are validated',()=>{assert.equal(Object.keys(e.WEAPONS).length,10);assert.equal(Object.keys(e.SKINS).length,12);assert.deepEqual(Array.from(e.cleanGrenades(['frag','medkit'])),['frag','medkit']);assert.deepEqual(Array.from(e.cleanGrenades(['invalid','smoke'])),['flash','smoke']);});
-test('Every weapon fires through the authoritative shooting path and consumes one round',()=>{for(const id of Object.keys(e.WEAPONS)){reset();const a=p('a'),b=p('b',3,14),m=add(a);add(b);a.guns=[id,'pistol'];a.ammo=[e.WEAPONS[id].magazine,12];e.shoot(a,10000);assert.equal(a.ammo[0],e.WEAPONS[id].magazine-1,id);assert.ok(m.some(m=>m.kind==='shot'&&m.gun===id));assert.ok(b.hp<100,id);}});
+test('Every weapon fires through the authoritative shooting path and consumes one round',()=>{const savedMath=ctx.Math;ctx.Math=Object.assign(Object.create(Math),{random:()=>0});try{for(const id of Object.keys(e.WEAPONS)){reset();const a=p('a'),b=p('b',3,14),m=add(a);add(b);a.guns=[id,'pistol'];a.ammo=[e.WEAPONS[id].magazine,12];e.shoot(a,10000);assert.equal(a.ammo[0],e.WEAPONS[id].magazine-1,id);assert.ok(m.some(m=>m.kind==='shot'&&m.gun===id));assert.ok(b.hp<100,id);}}finally{ctx.Math=savedMath;}});
 test('Medkits heal at most 45, never overheal, and full-health use does not consume a slot',()=>{reset();const a=p('a');add(a);e.throwGrenade(a,1,10000);assert.ok(a.grenades[1]);a.hp=80;e.throwGrenade(a,1,10001);assert.equal(a.hp,100);assert.equal(a.gearReadyAt[1],25001);assert.ok(!a.grenades[1]);a.hp=10;e.throwGrenade(a,1,10002);assert.equal(a.hp,10);e.throwGrenade(a,1,25001);assert.equal(a.hp,55);});
 test('Equipment refills at 15 seconds, preserves weapon ammo and keeps cooldown through death',()=>{const a=p('a');e.throwGrenade(a,0,10000);a.ammo[0]=7;e.refreshEquipment(a,24999);assert.ok(!a.grenades[0]);e.spawn(a,20000);assert.ok(!a.grenades[0]);a.ammo[0]=7;e.refreshEquipment(a,25000);assert.ok(a.grenades[0]);assert.equal(a.ammo[0],7);});
 test('Frag damage falls off with distance and solid cover blocks blast damage',()=>{reset();const a=p('a'),near=p('near',3,18),far=p('far',3,12),covered=p('covered',30,24);add(a);add(near);add(far);add(covered);e.detonate({kind:'frag',owner:'a',x:3,y:.8,z:20},10000);assert.ok(near.hp<far.hp);assert.ok(a.hp<100);e.detonate({kind:'frag',owner:'a',x:33,y:1,z:24},10000);assert.equal(covered.hp,100);});
@@ -22,7 +22,11 @@ const {MapCollision,bodyShape}=require('../map-collision.cjs');const tris=[];fun
 function step(a,n){for(let i=0;i<n;i++)collision.move(a,1/60);}
 test('Crouch can enter low cover and releasing crouch cannot stand into the ceiling',()=>{const a=p('a',0,1);a.input={forward:true,crouch:true};step(a,45);assert.equal(a.stance,'crouch');assert.ok(a.z<0);a.input={};step(a,20);assert.equal(a.stance,'crouch');assert.ok(!collision.blocked(a.x,a.y,a.z,.36,bodyShape(a).height));});
 test('Prone uses a lower, wider collision volume and moves more slowly',()=>{const a=p('a',6,5);a.input={prone:true,forward:true};step(a,60);assert.equal(a.stance,'prone');assert.ok(a.z>3&&a.z<5);assert.equal(bodyShape(a).height,.52*CHARACTER_SCALE);a.input={};step(a,2);assert.equal(a.stance,'stand');});
-test('Sprint-to-slide boosts momentum then expires, with no immediate repeated boost',()=>{const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,40);a.input.slide=true;step(a,1);assert.equal(a.stance,'slide');assert.ok(Math.hypot(a.vx,a.vz)>10);step(a,55);assert.equal(a.stance,'stand');a.input.slide=false;step(a,1);a.input.slide=true;step(a,1);assert.notEqual(a.stance,'slide');});
+test('Slide boosts are capped, cannot refresh an active slide, and recover for a fresh chain',()=>{
+ const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,40);a.input.slide=true;step(a,1);assert.equal(a.stance,'slide');const until=a.slideUntil;
+ a.input.slide=false;step(a,1);a.input.slide=true;step(a,1);assert.equal(a.slideUntil,until);assert.ok(Math.hypot(a.vx,a.vz)<=11);
+ a.input.slide=false;step(a,55);assert.equal(a.stance,'stand');a.input.slide=true;step(a,1);assert.equal(a.stance,'slide');assert.ok(a.slideUntil>until);
+});
 test('Jump is buffered, follows a smooth arc and does not repeatedly trigger while held',()=>{const a=p('a',6,5);a.input={jump:true};let takeoffs=0,max=0,last=true;for(let i=0;i<180;i++){collision.move(a,1/60);if(last&&!a.ground)takeoffs++;last=a.ground;max=Math.max(max,a.y);}assert.equal(takeoffs,1);assert.ok(max>1&&max<1.6);assert.ok(a.ground);});
 test('Airborne release preserves momentum and grounded release stops responsively',()=>{const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,30);a.input.jump=true;step(a,1);const speed=Math.hypot(a.vx,a.vz);a.input={};step(a,12);assert.ok(!a.ground);assert.ok(Math.hypot(a.vx,a.vz)>speed*.9);step(a,100);assert.ok(a.ground);assert.ok(Math.hypot(a.vx,a.vz)<.01);});
 test('Direction reversal responds quickly without exceeding sprint speed',()=>{const a=p('a',6,10);a.input={forward:true};step(a,30);a.input={back:true};step(a,8);assert.ok(a.vz>0);assert.ok(Math.hypot(a.vx,a.vz)<=6.01);});
@@ -78,3 +82,97 @@ test('Team Deathmatch scores enemy kills once, rejects friendly damage, and rese
  b.hp=100;e.applyDamage(friend,b,20,10003,'rifle');assert.equal(b.hp,80);vm.runInContext("setGameMode('capture','a')",ctx);
 });
 console.log(`${count} combat upgrade checks passed.`);
+
+
+test('Predicted requests validate cooldown, identity, ammo and reload without trusting client hits',()=>{
+ reset();const a=p('predicted'),messages=add(a);e.startRound();Object.assign(a,{x:3,y:0,z:20,yaw:0,pitch:0,clientShots:true,readyEpoch:0});
+ const shot=seq=>({seq,spawnSeq:a.spawnSeq,mapEpoch:0,slot:0,yaw:0,pitch:0,aim:true});
+ e.requestShot(a,shot(1),10000);assert.equal(a.ammo[0],29);assert.ok(messages.some(m=>m.kind==='shot'&&m.shotSeq===1));assert.equal(a.shotAck,1);
+ e.requestShot(a,shot(1),10100);assert.equal(a.ammo[0],29,'duplicate cannot fire twice');
+ e.requestShot(a,shot(2),10001);assert.equal(a.ammo[0],29,'cooldown stays authoritative');assert.equal(messages.at(-1).accepted,false);
+ e.requestShot(a,{...shot(3),spawnSeq:a.spawnSeq-1},11000);assert.equal(a.ammo[0],29);
+ e.requestShot(a,{...shot(4),slot:1},11000);assert.equal(a.ammo[0],29);
+ a.reloadAt=20000;e.requestShot(a,shot(5),11000);assert.equal(a.ammo[0],29);a.reloadAt=0;
+ e.requestShot(a,shot(6),11000);assert.equal(a.ammo[0],28);
+ e.requestShot(a,shot(7),a.nextShot-10);assert.equal(a.ammo[0],28);assert.equal(a.pendingShot.seq,7);
+ const request=a.pendingShot;a.pendingShot=null;e.finishShotRequest(a,request,a.nextShot);assert.equal(a.ammo[0],27);assert.equal(a.shotAck,7);
+ a.hp=0;e.requestShot(a,shot(8),13000);assert.equal(a.ammo[0],27);assert.equal(messages.at(-1).accepted,false);
+});
+
+test('Firing while sprinting retains speed and slide-jump takeoff no longer cuts momentum',()=>{
+ const a=p('a',6,14);a.input={forward:true,sprint:true};step(a,30);a.input.fire=true;step(a,15);assert.ok(Math.hypot(a.vx,a.vz)>8.35);
+ a.input.fire=false;a.input.slide=true;step(a,1);const before=Math.hypot(a.vx,a.vz);a.input.jump=true;step(a,1);assert.ok(Math.hypot(a.vx,a.vz)>before*.99);
+});
+test('Landing retains forward momentum but aiming and releasing input still brake',()=>{
+ const a=p('a',6,10);Object.assign(a,{vx:0,vz:-11,ground:true});a.input={forward:true,sprint:true};step(a,6);assert.ok(Math.hypot(a.vx,a.vz)>10);
+ a.input={aim:true,forward:true};step(a,20);assert.ok(Math.hypot(a.vx,a.vz)<3.55);a.input={};step(a,30);assert.ok(Math.hypot(a.vx,a.vz)<.01);
+});
+
+
+test('Sprint jump survives a release packet arriving before the next physics tick',()=>{
+ const a=p('a',6,10);a.input={forward:true,sprint:true};step(a,25);
+ // The server receives a short press and release together, retaining the latest input.
+ a.input={forward:true,sprint:true,jump:true,jumpSeq:1};
+ a.input={forward:true,sprint:true,jump:false,jumpSeq:1};
+ step(a,1);assert.ok(!a.ground&&a.vy>0&&a.y>0,'jump press must survive the released button state');
+ assert.ok(Math.hypot(a.vx,a.vz)>8.8,'jump retains sprint momentum');
+ step(a,70);assert.ok(a.ground,'the same jump sequence must not retrigger after landing');
+ a.input.jumpSeq=2;step(a,1);assert.ok(!a.ground&&a.vy>0,'next distinct press can jump again');
+});
+
+
+test('Weapon roles have monotonic distance falloff, per-family head bonuses and meaningful tradeoffs',()=>{
+ const {weaponDamage,weaponSpread}=require('../weapon-rules.cjs');
+ for(const [id,w]of Object.entries(e.WEAPONS)){
+  assert.ok(w.role&&w.rangeEnd>w.rangeStart,id);assert.equal(weaponDamage(w,0),w.damage);
+  let previous=Infinity;for(let d=0;d<=150;d++){const damage=weaponDamage(w,d);assert.ok(damage<=previous&&damage>0,id);previous=damage;assert.ok(weaponDamage(w,d,true)>=damage);}
+  assert.ok(weaponSpread(w,id,true,true,'stand')<weaponSpread(w,id,false,true,'stand'));
+ }
+ assert.ok(weaponDamage(e.WEAPONS.smg,40)<weaponDamage(e.WEAPONS.rifle,40));
+ assert.ok(weaponDamage(e.WEAPONS.shotgun,26)*e.WEAPONS.shotgun.pellets<35);
+ assert.equal(weaponDamage(e.WEAPONS.sniper,40),100);assert.ok(weaponDamage(e.WEAPONS.sniper,100)<100);assert.ok(e.WEAPONS.sniper.rate>1);
+ assert.ok(e.WEAPONS.carbine.rate<e.WEAPONS.rifle.rate&&e.WEAPONS.carbine.damage<e.WEAPONS.rifle.damage);
+ assert.ok(e.WEAPONS.lmg.magazine>e.WEAPONS.rifle.magazine&&e.WEAPONS.lmg.reload>e.WEAPONS.rifle.reload);
+});
+
+test('Hip-fire sniper and shotguns scatter across a bounded disk, while scoped sniper stays precise',()=>{
+ const {weaponSpread,sampleSpread,spreadDiameter}=require('../weapon-rules.cjs');
+ const hip=weaponSpread(e.WEAPONS.sniper,'sniper',false,true,'stand'),ads=weaponSpread(e.WEAPONS.sniper,'sniper',true,true,'stand');
+ assert.ok(hip>=.35&&ads<.001);assert.ok(e.WEAPONS.shotgun.spread>=.22&&e.WEAPONS.autoshot.spread>e.WEAPONS.shotgun.spread);
+ let seed=17,outer=0,center=0;const random=()=>((seed=(1664525*seed+1013904223)>>>0)/4294967296);
+ const quadrants=new Set();for(let i=0;i<2000;i++){const p=sampleSpread(hip,random),radius=Math.hypot(p.yaw,p.pitch)/(hip*.5);assert.ok(radius<=1);if(radius>.7)outer++;if(radius<.2)center++;quadrants.add((p.yaw>0?1:0)+(p.pitch>0?2:0));}
+ assert.equal(quadrants.size,4);assert.ok(outer>900&&center<150,'shots cover the cone instead of clumping at its center');
+ assert.ok(spreadDiameter(hip,110,900)>100);assert.ok(spreadDiameter(hip,85,900)>spreadDiameter(hip,110,900));
+});
+
+test('A slide pressed just before landing starts on contact without holding auto-slide',()=>{
+ const a=p('a',6,10);Object.assign(a,{y:.12,vy:-2,vz:-9,ground:false});a.input={forward:true,sprint:true,slide:true};step(a,1);assert.notEqual(a.stance,'slide');
+ a.input.slide=false;step(a,5);assert.equal(a.stance,'slide');assert.ok(Math.hypot(a.vx,a.vz)>10);const until=a.slideUntil;
+ step(a,55);assert.equal(a.stance,'stand');assert.equal(a.slideUntil,until);
+});
+test('Air steering turns sharply but continuously without adding speed',()=>{
+ const a=p('a',6,10);Object.assign(a,{y:100,ground:false,vz:-10.5});a.input={right:true};collision.move(a,1/60);
+ assert.ok(a.vx>0&&a.vx<1,'first frame cannot snap sideways');assert.ok(a.vz< -10);
+ step(a,12);assert.ok(a.vx>8,'can guide a fast jump around a corner');assert.ok(Math.hypot(a.vx,a.vz)<=10.5);
+ a.vx=30;a.vz=40;step(a,1);assert.ok(Math.hypot(a.vx,a.vz)<=11.000001);
+});
+test('A brief landing grace preserves forward speed but does not disable braking',()=>{
+ const a=p('a',6,10);Object.assign(a,{y:.02,vy:-1,vz:-10.8,ground:false});a.input={forward:true,sprint:true};step(a,4);assert.ok(a.ground);assert.ok(Math.hypot(a.vx,a.vz)>10.5);
+ a.input={};step(a,20);assert.ok(Math.hypot(a.vx,a.vz)<.01);
+});
+
+test('Timed landing slide/jump chains retain speed at 30, 60 and 120 Hz without stacking boosts',()=>{
+ const results=[];
+ for(const hz of [30,60,120]){
+  const a=p('a',6,16);a.input={forward:true,sprint:true};for(let n=0;n<hz/2;n++)collision.move(a,1/hz);
+  a.input={forward:true,sprint:true,slideSeq:1,jumpSeq:1};collision.move(a,1/hz);assert.ok(a.vy>0);let max=Math.hypot(a.vx,a.vz);
+  for(let chain=2;chain<=3;chain++){
+   let waiting=0;while(!(a.vy<0&&a.y<.22)&&waiting++<hz*2){collision.move(a,1/hz);max=Math.max(max,Math.hypot(a.vx,a.vz));}
+   assert.ok(waiting<hz*2);const previousReady=a.slideReadyAt;a.input.slideSeq=chain;a.input.jumpSeq=chain;
+   for(let n=0;n<Math.ceil(hz*.18);n++)collision.move(a,1/hz);
+   assert.ok(a.slideReadyAt>previousReady,'fresh landing slide started');assert.ok(!a.ground&&a.vy>0,'buffered jump launched after landing');assert.ok(Math.hypot(a.vx,a.vz)>10.5);max=Math.max(max,Math.hypot(a.vx,a.vz));
+  }
+  assert.ok(max<=11.000001);results.push(Math.hypot(a.vx,a.vz));
+ }
+ assert.ok(Math.max(...results)-Math.min(...results)<.1);
+});

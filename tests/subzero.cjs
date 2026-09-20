@@ -18,3 +18,15 @@ test('Player ascends a continuous slope',()=>{const p=player([3,5.5,0]);p.input.
 test('Subzero movement remains finite and outside solid geometry during varied input',()=>{for(const s of world.SPAWNS){const p=player(s);for(let i=0;i<600;i++){p.yaw=Math.sin(i/71)*Math.PI;p.input={forward:true,sprint:true,jump:i%71===0};c.move(p,1/30);assert.ok(Number.isFinite(p.y));assert.ok(!c.blocked(p.x,p.y,p.z),JSON.stringify(p));}}});
 const start=performance.now();for(let i=0;i<4800;i++){const s=world.SPAWNS[i%16],p=player(s);p.input.forward=true;c.move(p,1/30);}console.log(`Subzero movement benchmark: ${((performance.now()-start)/4800).toFixed(3)} ms/player tick (local CPU, not browser FPS).`);
 console.log(`${count} Subzero checks passed.`);
+
+test('Shared physics preserves movement and jump height across 30, 60 and 120 Hz',()=>{
+ const results=[];
+ for(const hz of [30,60,120]){const p=player([0,5,0]);p.input={forward:true,jump:true};let peak=0;for(let n=0;n<hz*.5;n++){fixture.move(p,1/hz);peak=Math.max(peak,p.y);}results.push({x:p.x,y:p.y,z:p.z,peak});}
+ for(const p of results){assert.ok(Math.abs(p.z-results[0].z)<.001);assert.ok(Math.abs(p.y-results[0].y)<.001);assert.ok(Math.abs(p.peak-results[0].peak)<.02);}
+});
+
+test('Diagonal wall contact preserves tangential movement without penetrating the wall',()=>{
+ const p=player([2,-1.7,0]);p.input={forward:true,left:true,sprint:true};for(let i=0;i<12;i++)fixture.move(p,1/60);
+ assert.ok(p.x<1.5,'continues toward the doorway');assert.ok(!fixture.blocked(p.x,p.y,p.z));assert.ok(p.z>=-2+.36*CHARACTER_SCALE-.02);
+ for(let i=0;i<16;i++)fixture.move(p,1/60);p.input={forward:true};for(let i=0;i<24;i++)fixture.move(p,1/60);assert.ok(p.z<-2,'passes through the doorway');
+});

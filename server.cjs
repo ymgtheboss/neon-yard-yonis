@@ -8,6 +8,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const PORT = Number(process.env.PORT || 8000);
 const ROUND = Math.max(1000, Number(process.env.ROUND_MS) || 210000);
 const RESPAWN = 5000;
+const {weaponDamage,weaponSpread,sampleSpread}=require('./weapon-rules.cjs');
 const players = new Map();
 const clients = new Map();
 const {CaptureMode}=require('./capture-mode.cjs');
@@ -17,38 +18,38 @@ function assignTeam(p){const count={blue:0,red:0};for(const q of players.values(
 function setGameMode(mode,requester){if(requester!==host||phase==='playing'||!['capture','deathmatch','tdm'].includes(mode))return false;gameMode=mode;capture.reset();teamScores={blue:0,red:0};let n=0;for(const p of players.values()){p.team=mode!=='deathmatch'?['blue','red'][n++%2]:null;p.captures=0;}return true;}
 
 const WEAPONS = {
-  pistol: {
+  pistol: {role:"Fast backup",rangeStart:12,rangeEnd:38,minDamage:0.55,headMultiplier:1.8,aimSpread:0.4,
     name: "VOLT / Glock 17",
-    damage: 30, rate: 0.25, magazine: 12,
+    damage: 28, rate: 0.24, magazine: 12,
     reload: 1.15, spread: 0.012, pellets: 1,
     auto: false, color: "#ffcc66"
   },
-  rifle: {
+  rifle: {role:"Mid-range power",rangeStart:22,rangeEnd:65,minDamage:0.72,headMultiplier:1.8,aimSpread:0.4,
     name: "HAVOC / AK-15",
-    damage: 24, rate: 0.105, magazine: 30,
+    damage: 26, rate: 0.125, magazine: 30,
     reload: 1.8, spread: 0.022, pellets: 1,
     auto: true, color: "#60e6de"
   },
-  shotgun: {
+  shotgun: {role:"Close-range burst",rangeStart:7,rangeEnd:26,minDamage:0.2,headMultiplier:1.25,aimSpread:0.85,
     name: "BREACH / Mossberg 500",
-    damage: 14, rate: 0.85, magazine: 6,
-    reload: 2.1, spread: 0.085, pellets: 8,
+    damage: 13, rate: 0.9, magazine: 6,
+    reload: 2.1, spread: 0.24, pellets: 8,
     auto: false, color: "#ff9866"
   },
-  sniper: {
+  sniper: {role:"Long-range precision",rangeStart:50,rangeEnd:100,minDamage:0.85,headMultiplier:1.8,aimSpread:0.0024,
     name: "GHOST / AWP",
-    damage: 80, rate: 1.2, magazine: 5,
-    reload: 2.4, spread: 0.075, pellets: 1,
+    damage: 100, rate: 1.35, magazine: 5,
+    reload: 2.4, spread: 0.38, pellets: 1,
     auto: false, color: "#c0a0ff"
   },
-  revolver: {name:"BASILISK / Colt Python",damage:55,rate:.48,magazine:6,reload:2.2,spread:.009,pellets:1,auto:false,color:"#efbd78"},
-  lmg: {name:"ATLAS / M249",damage:25,rate:.12,magazine:70,reload:3.6,spread:.032,pellets:1,auto:true,color:"#b9cb74"},
-  dmr: {name:"KESTREL / M14",damage:46,rate:.34,magazine:15,reload:2.05,spread:.016,pellets:1,auto:false,color:"#aabcf0"},
-  carbine: {name:"WRAITH / M4A1",damage:21,rate:.088,magazine:28,reload:1.65,spread:.02,pellets:1,auto:true,color:"#e791b4"},
-  autoshot: {name:"MAUL / AA-12",damage:10,rate:.34,magazine:12,reload:2.8,spread:.105,pellets:7,auto:true,color:"#f18468"},
-  smg: {
+  revolver: {role:"High-risk sidearm",rangeStart:18,rangeEnd:50,minDamage:0.65,headMultiplier:1.8,aimSpread:0.35,name:"BASILISK / Colt Python",damage:58,rate:.55,magazine:6,reload:2.2,spread:.009,pellets:1,auto:false,color:"#efbd78"},
+  lmg: {role:"Sustained support",rangeStart:25,rangeEnd:70,minDamage:0.72,headMultiplier:1.8,aimSpread:0.5,name:"ATLAS / M249",damage:23,rate:.12,magazine:70,reload:3.6,spread:.032,pellets:1,auto:true,color:"#b9cb74"},
+  dmr: {role:"Precision follow-up",rangeStart:35,rangeEnd:90,minDamage:0.86,headMultiplier:1.8,aimSpread:0.2,name:"KESTREL / M14",damage:50,rate:.38,magazine:15,reload:2.05,spread:.016,pellets:1,auto:false,color:"#aabcf0"},
+  carbine: {role:"Controllable all-rounder",rangeStart:18,rangeEnd:60,minDamage:0.68,headMultiplier:1.8,aimSpread:0.35,name:"WRAITH / M4A1",damage:22,rate:.095,magazine:28,reload:1.65,spread:.02,pellets:1,auto:true,color:"#e791b4"},
+  autoshot: {role:"Close-range pressure",rangeStart:5,rangeEnd:20,minDamage:0.18,headMultiplier:1.25,aimSpread:0.85,name:"MAUL / AA-12",damage:9,rate:.4,magazine:12,reload:2.8,spread:.3,pellets:8,auto:true,color:"#f18468"},
+  smg: {role:"Mobile close quarters",rangeStart:10,rangeEnd:38,minDamage:0.45,headMultiplier:1.8,aimSpread:0.6,
     name: "RUSH / MP5",
-    damage: 17, rate: 0.068, magazine: 36,
+    damage: 18, rate: 0.075, magazine: 36,
     reload: 1.5, spread: 0.038, pellets: 1,
     auto: true, color: "#9cf08c"
   }
@@ -168,9 +169,9 @@ function spawn(p, now) {
   Object.assign(p, {
     spawnSeq:(p.spawnSeq||0)+1,characterScale:CHARACTER_SCALE/(MAP?.id==='subzero'?1.3:1),
     x: s[0], y: groundAt(s[0],s[1]), ground: true, z: s[1], vy: 0,
-    vx:0,vz:0,stance:'stand',motionTime:0,slideUntil:0,slideReadyAt:0,jumpHeld:false,crouchHeld:false,jumpUntil:-1,lastGroundAt:-100,
+    vx:0,vz:0,stance:'stand',motionTime:0,slideUntil:0,slideReadyAt:0,slideQueuedUntil:-1,slideSeqHandled:p.lastSlideRequest||0,landedAt:-100,jumpHeld:false,jumpSeqHandled:p.lastJumpRequest||0,crouchHeld:false,jumpUntil:-1,lastGroundAt:-100,
     hp: 100, aliveAt: 0, shield: now + 1500,
-    slot: 0, reloadAt: 0, nextShot: 0,
+    slot: 0, reloadAt: 0, nextShot: 0, pendingShot:null,
     grenades: (p.gearReadyAt||[0,0]).map(t=>now>=t),
     gearReadyAt:p.gearReadyAt||[0,0],
     guns: [...p.loadout],
@@ -228,7 +229,7 @@ function reload(p, now) {
   }
 }
 
-function shoot(p, now) {
+function shoot(p, now, shotSeq) {
   const id = p.guns[p.slot];
   const w = WEAPONS[id];
 
@@ -265,15 +266,11 @@ function shoot(p, now) {
   const damage = new Map();
 
   for (let pellet = 0; pellet < w.pellets; pellet++) {
-    let spread = w.spread;
-    if (p.input.aim) spread *= id === "sniper" ? 0.012 : 0.45;
-    if (!p.ground) spread *= 1.7;
-    if(p.stance==='crouch')spread*=.8;
-    if(p.stance==='prone')spread*=.55;
-    if(p.stance==='slide')spread*=1.5;
+    const spread=weaponSpread(w,id,p.input.aim,p.ground,p.stance);
 
-    const yaw = p.yaw + (Math.random() - 0.5) * spread;
-    const pitch = p.pitch + (Math.random() - 0.5) * spread;
+    const scatter=sampleSpread(spread,Math.random);
+    const yaw = p.yaw + scatter.yaw;
+    const pitch = p.pitch + scatter.pitch;
     const d=muzzleRay(p,yaw,pitch,o,now);
     let distance = wallDistance(o, d);
     let victim = null, headshot = false;
@@ -301,19 +298,16 @@ function shoot(p, now) {
     });
 
     if (victim) {
-      const falloff = (id === "shotgun" || id === "autoshot")
-        ? clamp(1 - distance / 50, 0.2, 1)
-        : id === "smg" ? clamp(1 - distance / 140, 0.45, 1) : 1;
 
       const hit = damage.get(victim.id) || { amount: 0, head: false };
-      hit.amount += Math.round(w.damage * falloff * (headshot ? 1.8 : 1));
+      hit.amount += weaponDamage(w,distance,headshot);
       hit.head ||= headshot;
       damage.set(victim.id, hit);
     }
   }
 
   if(damage.size)p.hits=(p.hits||0)+1;
-  event({ kind: "shot", id: p.id, gun: id, origin: o, ends: shots });
+  event({ kind: "shot", id: p.id, gun: id, origin: o, ends: shots, shotSeq });
 
   for (const [id, hit] of damage) {
     const q = players.get(id);
@@ -322,6 +316,26 @@ function shoot(p, now) {
   }
 }
 
+// Explicit requests let the client predict cosmetics; all combat remains authoritative.
+function finishShotRequest(p,request,now){
+  const before=p.ammo[p.slot],yaw=p.yaw,pitch=p.pitch,aim=p.input.aim;
+  const valid=Number.isFinite(now)&&phase==='playing'&&p.hp>0&&p.readyEpoch===mapEpoch&&request.spawnSeq===p.spawnSeq&&request.mapEpoch===mapEpoch&&request.slot===p.slot;
+  if(valid){
+    p.yaw=finite(request.yaw,p.yaw)%(Math.PI*2);p.pitch=clamp(finite(request.pitch,p.pitch),-1.45,1.45);p.input.aim=!!request.aim;
+    shoot(p,now,request.seq);
+    p.yaw=yaw;p.pitch=pitch;p.input.aim=aim;
+  }
+  p.shotAck=Math.max(p.shotAck||0,request.seq);
+  send(clients.get(p.id),{type:'event',kind:'shotResult',shotSeq:request.seq,accepted:valid&&p.ammo[p.slot]<before,retryAfter:Number.isFinite(now)?Math.max(0,p.nextShot-now):0});
+}
+function requestShot(p,request,now){
+  if(!p.clientShots||!Number.isSafeInteger(request.seq)||request.seq<=0||request.seq<=(p.lastRequestedShot||0))return;
+  p.lastRequestedShot=request.seq;
+  // At most one early request waits for the cooldown; never stack a firing burst.
+  if(p.pendingShot){finishShotRequest(p,p.pendingShot,-Infinity);p.pendingShot=null;}
+  if(phase==='playing'&&p.hp>0&&!p.reloadAt&&p.nextShot>now&&p.nextShot-now<=50)p.pendingShot=request;
+  else finishShotRequest(p,request,now);
+}
 function playerEye(p){const h=bodyShape(p).eye;return {x:p.x,y:p.y+h,z:p.z};}
 function playerHead(p){const h=bodyShape(p).height;return {x:p.x-(p.stance==='prone'?Math.sin(p.yaw)*.48*(p.characterScale||CHARACTER_SCALE):0),y:p.y+h-.2*(p.characterScale||CHARACTER_SCALE),z:p.z-(p.stance==='prone'?Math.cos(p.yaw)*.48*(p.characterScale||CHARACTER_SCALE):0)};}
 function playerBounds(p){const h=bodyShape(p);return {lo:{x:p.x-h.rx,y:p.y+.04*(p.characterScale||CHARACTER_SCALE),z:p.z-h.rz},hi:{x:p.x+h.rx,y:p.y+(p.stance==='prone'?h.height:h.height-.4*(p.characterScale||CHARACTER_SCALE)),z:p.z+h.rz}};}
@@ -441,12 +455,15 @@ function move(p,dt) {
   const f=Number(!!i.forward)-Number(!!i.back);
   const s=Number(!!i.right)-Number(!!i.left);
   const length=Math.hypot(f,s)||1;
-  const speed=i.aim?3.5:i.sprint&&!i.fire?9:6;
+  const speed=i.aim?3.5:i.sprint?(i.fire?8.4:9):6;
 
   const dx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed*dt;
   const dz=(-Math.cos(p.yaw)*f-Math.sin(p.yaw)*s)/length*speed*dt;
 
-  if(i.jump&&p.ground) {
+  const jumpPressed=i.jumpSeq>0?i.jumpSeq>(p.jumpSeqHandled||0):i.jump&&!p.jumpHeld;
+  if(i.jumpSeq>0)p.jumpSeqHandled=Math.max(p.jumpSeqHandled||0,i.jumpSeq);
+  p.jumpHeld=!!i.jump;
+  if(jumpPressed&&p.ground) {
     p.vy=7.8;
     p.ground=false;
   }
@@ -565,6 +582,10 @@ const app = http.createServer((req, res) => {
     );
   }
 
+  if(pathname==='/weapon-rules.js'){
+    const code=fs.readFileSync(path.join(__dirname,'weapon-rules.cjs'),'utf8').replace('module.exports={weaponDamage,weaponSpread,sampleSpread,spreadDiameter};','export {weaponDamage,weaponSpread,sampleSpread,spreadDiameter};');
+    res.writeHead(200,{'Content-Type':'text/javascript','Cache-Control':'no-store'});return res.end(code);
+  }
   if(pathname==='/character-config.js'){
     const code=fs.readFileSync(path.join(__dirname,'character-config.js'),'utf8').replace('module.exports = { CHARACTER_SCALE };','export { CHARACTER_SCALE };');
     res.writeHead(200,{'Content-Type':'text/javascript','Cache-Control':'no-store'});return res.end(code);
@@ -591,6 +612,9 @@ const app = http.createServer((req, res) => {
     '/addons/utils/BufferGeometryUtils.js':['node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','text/javascript'],
     '/addons/utils/SkeletonUtils.js':['node_modules/three/examples/jsm/utils/SkeletonUtils.js','text/javascript'],
     "/": ["index.html", "text/html"],
+    '/practice':['practice.html','text/html'],
+    '/practice.mjs':['practice.mjs','text/javascript'],
+    '/practice.css':['practice.css','text/css'],
     "/index.html": ["index.html", "text/html"],
     '/combat-visuals.js':['combat-visuals.mjs','text/javascript'],
     '/combat.css':['combat.css','text/css'],
@@ -607,6 +631,7 @@ const app = http.createServer((req, res) => {
   };
 
   for(const id of Object.keys(WEAPONS))routes['/weapons/'+id+'.glb']=['public/weapons/'+id+'.glb','model/gltf-binary'];
+  for(const id of Object.keys(WEAPONS))routes['/weapons/previews/'+id+'.webp']=['public/weapons/previews/'+id+'.webp','image/webp'];
   routes['/weapons/manifest.json']=['public/weapons/manifest.json','application/json'];
   routes['/weapon-credits.html']=['public/weapon-credits.html','text/html'];
   for(const name of ['pistol','rifle','shotgun','sniper','revolver','lmg','dmr','carbine','autoshot','smg','clipload2','singlebullet1'])routes['/audio/'+name+'.wav']=['public/audio/'+name+'.wav','audio/wav'];
@@ -670,7 +695,7 @@ wss.on("connection", ws => {
 
       id = crypto.randomBytes(8).toString("hex");
       const p = {
-        id,
+        id,clientShots:m.predictedFire===true,
         name: String(m.name || "Player")
           .replace(/[\x00-\x1f<>]/g, "").trim().slice(0, 18) || "Player",
         skin: SKINS[m.skin] ? m.skin : "cyan",
@@ -694,13 +719,19 @@ wss.on("connection", ws => {
     const p = players.get(id);
     if (!p) return;
 
+    if(m.type==='shot'){requestShot(p,m,now);return;}
     if(m.type==='mode'){if(!setGameMode(m.mode,id))send(ws,{type:'error',message:'Only the host can change modes between rounds.'});return;}
     if(m.type==='voteMap'){if(phase==='ended'&&Object.hasOwn(worlds,m.mapId))mapVotes.set(id,m.mapId);return;}
     if(m.type==='mapReady') {if(m.mapId===mapId()&&m.mapEpoch===mapEpoch&&p.readyEpoch!==mapEpoch){p.readyEpoch=mapEpoch;p.shield=Date.now()+1500;}return;}
     if(m.type==='map') {if(!changeMap(m.mapId,id))send(ws,{type:'error',message:'Only the host can change maps between rounds.'});return;}
     if (m.type === "input") {
       p.inputSeq=clamp(Math.floor(finite(m.seq)),0,1e9);
+      const jumpSeq=Number.isSafeInteger(m.jumpSeq)&&m.jumpSeq>0&&m.jumpSeq<=1e9?m.jumpSeq:0;
+      const slideSeq=Number.isSafeInteger(m.slideSeq)&&m.slideSeq>0&&m.slideSeq<=1e9?m.slideSeq:0;
+      if(slideSeq)p.lastSlideRequest=Math.max(p.lastSlideRequest||0,slideSeq);
+      if(jumpSeq)p.lastJumpRequest=Math.max(p.lastJumpRequest||0,jumpSeq);
       p.input = {
+        jumpSeq:jumpSeq?(p.lastJumpRequest||0):0,slideSeq:slideSeq?(p.lastSlideRequest||0):0,
         forward: !!m.forward, back: !!m.back,
         left: !!m.left, right: !!m.right,
         sprint: !!m.sprint, jump: !!m.jump,
@@ -796,7 +827,8 @@ setInterval(() => {
       }
 
       const w = WEAPONS[p.guns[p.slot]];
-      if (p.input.fire && (w.auto || !p.wasFire))
+      if(p.pendingShot&&now>=p.nextShot){const request=p.pendingShot;p.pendingShot=null;finishShotRequest(p,request,now);}
+      if (!p.clientShots && p.input.fire && (w.auto || !p.wasFire))
         shoot(p, now);
       p.wasFire = !!p.input.fire;
     }
@@ -851,10 +883,10 @@ for(const g of grenades) {
       results:phase==='ended'?roundResults:[],mapVotes:Object.fromEntries(mapCatalog.map(m=>[m.id,[...mapVotes.values()].filter(v=>v===m.id).length])),myVote:mapVotes.get(id)||null,
       self: {
         slot: p.slot, guns: p.guns,
-        ammo: p.ammo, reloadAt: p.reloadAt,
+        ammo: p.ammo, reloadAt: p.reloadAt,shotAck:p.shotAck||0,
         grenades: p.grenades,
         grenadeLoadout: p.grenadeLoadout,gearReadyAt:p.gearReadyAt,inputSeq:p.inputSeq||0,
-        motion:{motionTime:p.motionTime,slideUntil:p.slideUntil,slideReadyAt:p.slideReadyAt,jumpUntil:p.jumpUntil,jumpHeld:p.jumpHeld,crouchHeld:p.crouchHeld,lastGroundAt:p.lastGroundAt}
+        motion:{motionTime:p.motionTime,slideUntil:p.slideUntil,slideReadyAt:p.slideReadyAt,slideQueuedUntil:p.slideQueuedUntil,slideSeqHandled:p.slideSeqHandled||0,landedAt:p.landedAt,jumpUntil:p.jumpUntil,jumpHeld:p.jumpHeld,jumpSeqHandled:p.jumpSeqHandled||0,crouchHeld:p.crouchHeld,lastGroundAt:p.lastGroundAt}
       }
     });
   }

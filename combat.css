@@ -43,3 +43,17 @@ button,input,select,.tag{border-radius:8px}button{background:#1c2c40;border-colo
 #killcam.hidden{display:none}.replay-top{position:absolute;top:16px;left:50%;transform:translateX(-50%);font-size:22px;font-weight:900;letter-spacing:4px;text-align:center}.replay-top span{display:block;font-size:9px;color:#efb57b;letter-spacing:2px;margin-top:8px}.replay-bottom{position:absolute;bottom:20px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:linear-gradient(transparent,#0b121bd9);padding:20px}.replay-bottom strong{font-size:14px}.replay-bottom small{color:#c1d4db}#skipKillcam{pointer-events:auto;background:#172c38;border-color:#92d5c0}
 
 #captureHud{position:absolute;top:128px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;max-width:94vw}#captureHud.hidden{display:none}#teamScore{background:#10212ce8;padding:8px 16px;border-radius:6px;font-weight:800;font-size:13px;color:#e6f1f5}#captureCards{display:flex;gap:7px;margin:7px 0}.capture-card{border:1px solid;padding:7px 10px;border-radius:4px;font-size:10px;white-space:nowrap}#captureTimer{font-size:10px;text-shadow:0 1px 3px #000;color:#e6eee9}.objective-label{position:absolute;left:0;top:0;border:1px solid currentColor;padding:5px 9px;background:#0d1a24bd;border-radius:4px;font-size:12px;font-weight:800;pointer-events:none}#objectiveLabels{position:absolute;inset:0;pointer-events:none}@media(max-width:600px){#captureHud{top:128px;width:94vw}.capture-card{font-size:8px;padding:6px 4px;flex:1}#teamScore{font-size:11px}}
+
+/* Hold-to-view scoreboard leaves the live game controls and sightline available. */
+#board.live-scoreboard{pointer-events:none;background:#07111b38}
+#board.live-scoreboard .modal{background:#0b172be6}
+#board.live-scoreboard button{visibility:hidden}
+
+#hitConfirm{font-size:12px;font-variant-numeric:tabular-nums;letter-spacing:1px}#hitConfirm.lethal-hit{font-weight:900;text-shadow:0 0 12px #7affb977}#hitmark.lethal-hit{filter:drop-shadow(0 0 5px #ffb66e)}#damageTaken{position:absolute;bottom:125px;left:30px;color:#ff9c8e;font:700 15px ui-monospace,monospace;text-shadow:0 2px 5px #000;opacity:0;pointer-events:none}
+
+.combat-number{position:absolute;left:0;top:0;pointer-events:none;font:800 17px ui-monospace,monospace;text-shadow:0 2px 3px #000,0 0 7px #000;white-space:nowrap;will-change:transform,opacity}
+
+/* Four separated ticks show the firing cone; wide-spread guns also show its edge. */
+#crosshair,#reticle{color:#ecf0df;background:linear-gradient(currentColor,currentColor) center top/2px 8px no-repeat,linear-gradient(currentColor,currentColor) center bottom/2px 8px no-repeat,linear-gradient(currentColor,currentColor) left center/8px 2px no-repeat,linear-gradient(currentColor,currentColor) right center/8px 2px no-repeat;filter:drop-shadow(0 1px 2px #000);pointer-events:none}
+#crosshair::before,#crosshair::after,#reticle::before,#reticle::after{display:none}
+#crosshair.wide-spread::before,#reticle.wide-spread::before{content:"";display:block;position:absolute;inset:8px;width:auto;height:auto;border:1px solid currentColor;border-radius:50%;background:none;box-shadow:none;opacity:.35}

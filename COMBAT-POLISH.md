@@ -43,6 +43,53 @@ Validation: engine, client, combat, Subzero/Bellhaven collision, weapon-asset an
 ## Movement flow
 
 - Air input rotates horizontal velocity at a limited rate instead of blending it toward a new direction and losing speed. Air acceleration is bounded by the ordinary movement speed; carried slide momentum cannot be multiplied by circling.
-- A slide jump carries 92% of its current horizontal momentum once, ends the slide, and returns to standing/crouching only when the full body fits. The 7.1 jump impulse and existing gravity remain unchanged.
+- A slide jump carries its current horizontal momentum without a takeoff penalty, ends the slide, and returns to standing/crouching only when the full body fits. The 7.1 jump impulse and existing gravity remain unchanged.
 - Stair camera smoothing uses a short, bounded height offset for small grounded steps. It does not move the collision body, decays quickly in the air, and resets on respawn or teleport.
 - Regression checks cover momentum preservation, speed bounds, unchanged jump apex, camera settling, and map collision/navigation.
+
+## Immediate firing and direct movement response
+
+- The browser predicts its own recoil, muzzle flash, casing, sound and ammo display immediately. Explicit, increasing shot IDs connect each cosmetic shot to authoritative server confirmation; confirmed tracers, impacts, hit markers and damage still come from the server.
+- The server validates spawn/map/slot, readiness, life, reload, ammo, muzzle obstruction and weapon cooldown. It permits only one request to wait up to 50 ms for a cooldown, and rejects duplicates. Existing clients without the predicted-fire protocol retain the previous firing path.
+- Ammo prediction stays pending until an authoritative snapshot acknowledges it. Rejections restore the local ammo display. Accepted confirmations never restart the local automatic-fire timer. Switching waits for the server's selected slot; reload/switch delays also block local firing effects.
+- Movement prediction now runs on each rendered frame, sampling current controls. Both client and server split collision movement into steps no longer than 1/120 second. Network input and state updates remain at 30 Hz.
+- The camera follows current predicted horizontal movement and jump position directly. Only network correction offsets, stair transitions and stance eye-height changes are smoothed; large corrections snap instead of dragging the camera across the map. Velocity extrapolation through walls has been removed.
+
+Validation: client VM tests cover immediate effects, delayed confirmation deduplication, ammo reconciliation, semi-auto/reload/switch gating and camera response before a network send. Server and real WebSocket tests cover shot identity, cooldown, stale spawn/slot, reload/death and duplicate held-fire suppression. Shared physics tests cover collision and movement/jump agreement at 30/60/120 Hz. Hardware frame pacing and subjective movement feel still need playtesting on the player's device.
+
+
+## Momentum, weapon framing and contact polish
+
+- Sprinting while firing targets 8.4 rather than 6 units/second (normal sprint remains 9). Slides recover after 0.6 seconds (an active slide cannot refresh itself), lose speed more gradually, and carry their takeoff speed into a jump. Forward landings bleed excess momentum gently; aiming, releasing movement and reversing still brake promptly. Jump impulse, gravity and maximum slide boost remain unchanged.
+- Hip poses are fitted by weapon family. Reloads lower the gun instead of lifting it into the sightline, sprint rotations are smaller, and recoil is applied directly after pose smoothing. Turning sway is normalized for frame duration; landing dip is smaller and settles faster. Existing per-model ADS fitting is preserved.
+- Wall contact advances to a bounded safe fraction of the blocked axis step, while allowing movement along the other axis. Contact refinement stops within 4 mm and at three probes; stance-clearance checks run only when changing stance. Doorway, slope, ceiling, thin-wall and both-map traversal regression checks cover the changes.
+- Both world-animation passes share one interpolated player list each frame. Optional telemetry includes the rolling 95th-percentile frame interval to expose stutter hidden by average FPS. It measures the browser's actual frame interval, including stalls; it is not server ping. Hardware GPU performance still requires testing on the target device.
+- Validation: momentum/braking and takeoff tests, immediate weapon-kick and reload-framing checks, full regression suite, and real Chrome weapon/reload rendering and multiplayer smoke test. Chrome uses software rendering here, so its FPS is not a hardware performance estimate.
+
+
+## FOV and live controls
+
+- Default/reset FOV is 110. Saved settings at the former 85 default migrate once; other customized values remain intact.
+- Hold Tab to view the scoreboard while moving, sprinting, jumping and looking around. It keeps pointer lock, uses a lighter overlay and closes on release or input reset. Settings/pause/results screens retain their normal behavior.
+- Jump presses are latched separately for local prediction and network input so a quick Space tap while sprinting is not lost between updates. Jump height and momentum rules are unchanged.
+- Validated with client input-event tests, short-tap delivery, scoreboard/reset behavior and saved-FOV migration checks.
+
+## Real weapon images in the armory
+
+Weapon cards and both selected loadout slots now use transparent WebP renders of the actual textured GLB models and fitted optics. The ten images are static assets, so the menu does not create extra WebGL scenes or render loops. Rebuild after changing models or optics with `node tests/browser.cjs --build-weapon-previews`; validate desktop/mobile layouts with `node tests/browser.cjs --menu`.
+
+## Reliable sprint-jump presses
+
+A short jump press could still be overwritten by its release when both network inputs arrived before a server physics tick. Each press now has a monotonic ID, retained in subsequent input packets and acknowledged in movement snapshots. Client prediction and server physics consume each ID once, preserving sprint momentum without repeating the jump on landing. Respawn seeds the consumed ID from the last received request, and a new connection resets the client's ID counter. Legacy clients retain button-edge support. Regression coverage includes the formerly failing press/release-overwrite case, local input sampling, and real WebSocket sprint-jump delivery.
+
+## Hit feedback, weapon roles and standalone training
+
+- Confirmed hits now add bounded, fading damage numbers over the victim, with gold headshots and green KO labels. Body/headshot sounds have distinct two-tone signatures; eliminations add a short chord. Incoming hits display the actual health lost alongside the directional indicator.
+- Ten weapon profiles now have class-specific damage falloff and ADS spread. Shotguns retain broad patterns while aiming; rifles, sidearms, sustained-fire weapons and precision guns have explicit roles shown in the armory. See `WEAPON-BALANCE.md` for values and tradeoffs.
+- The Play page links to `/practice`: a separate range with five target distances, optional lateral movement, actual GLBs and shot recordings, target health/damage/kill-time feedback, session accuracy, manual reloads and unrestricted setup loadout changes. It uses shared damage/spread and collision code and does not join or modify multiplayer rooms.
+- Validation: shared-rule and feedback tests, full regression suite including network game modes, and Chrome target-hit/reset/motion/model-selection checks. Balance remains a first tuning pass to refine through playtesting.
+
+### Slide-jump chaining and air steering
+
+- Jump and slide presses buffer for 180 ms, with sequence IDs preserving quick taps between server ticks. A slide tapped before landing can carry into a buffered jump.
+- Landing preserves forward momentum for 120 ms; releasing movement and aiming still brake. Air steering turns at a bounded rate without adding speed beyond the 11-unit/second cap. Jump impulse and gravity remain unchanged.

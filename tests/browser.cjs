@@ -23,6 +23,16 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
    await call('Fetch.fulfillRequest',{requestId:m.params.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'text/html'}],body:Buffer.from(html).toString('base64')});
   }catch(e){errors.push(String(e));}});
  }
+ if(process.argv.includes('--practice')){
+  await call('Page.navigate',{url:`http://127.0.0.1:${port}/practice`});
+  await until(()=>evaluate("!document.getElementById('enter').disabled"),'practice weapon assets');
+  const result=await evaluate(`(async()=>{const {range}=await import('/practice.mjs');document.getElementById('primary').value='sniper';document.getElementById('primary').onchange();range.aimAt(range.targets[0],true);const fired=range.shoot(performance.now());const first={...range.stats};const text=document.getElementById('readout').textContent;range.resetTargets();document.getElementById('primary').value='smg';document.getElementById('primary').onchange();document.getElementById('moving').checked=true;return {ready:range.ready,count:range.targets.length,fired,first,text,reset:range.stats};})()`);
+  assert.equal(result.ready,true);assert.equal(result.count,5);assert.equal(result.fired,true);assert.equal(result.first.shots,1);assert.equal(result.first.hits,1);assert.equal(result.first.kills,1);assert.ok(result.text.includes('HEADSHOT'));assert.equal(result.reset.shots,0);assert.equal(result.reset.guns[0],'smg');assert.equal(result.reset.ammo[0],36);
+  const oldX=await evaluate("import('/practice.mjs').then(m=>m.range.targets[0].group.position.x)");await until(async()=>await evaluate("import('/practice.mjs').then(m=>m.range.targets[0].group.position.x)")!==oldX,'moving practice targets animate');
+  await evaluate("import('/practice.mjs').then(m=>{m.range.aimAt(m.range.targets[2]);m.range.release();})");
+  assert.deepEqual(errors,[]);fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});const picture=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(__dirname,'artifacts/practice-range.png'),Buffer.from(picture.data,'base64'));
+  console.log('PASS standalone practice range: five targets, real-model loadout changes, headshots, damage, kills, moving targets and reset');return;
+ }
  await call('Page.navigate',{url:`http://127.0.0.1:${port}`});
  await until(()=>evaluate(`document.getElementById('joinMessage')?.textContent==='${villageTest?'Bellhaven':'Subzero'} ready'`),'Subzero GLB, textures and collision loading');
  await until(()=>evaluate("window.weaponAssets?.loaded===10"),'all ten imported weapon models');
@@ -41,7 +51,18 @@ async function evaluate(expression){const r=await call('Runtime.evaluate',{expre
   await until(()=>evaluate("document.getElementById('joinMessage')?.textContent==='Subzero ready'"),'production page after replay');
   assert.deepEqual(errors,[]);console.log('PASS twelve human outfits, recorded killer-view rendering, replay skip, and production-page reload');return;
  }
+ if(process.argv.includes('--build-weapon-previews')){
+  const previews=await evaluate(fs.readFileSync(path.join(__dirname,'weapon-previews.js'),'utf8'));
+  const directory=path.join(root,'public/weapons/previews');fs.mkdirSync(directory,{recursive:true});
+  for(const [id,data]of Object.entries(previews))fs.writeFileSync(path.join(directory,id+'.webp'),Buffer.from(data,'base64'));
+  assert.equal(Object.keys(previews).length,10);console.log('PASS generated ten textured weapon thumbnails from production GLBs');return;
+ }
  if(process.argv.includes('--menu')){
+  await evaluate("document.getElementById('navWeapons').click()");
+  await until(()=>evaluate("[...document.querySelectorAll('#weapons .weapon-photo')].filter(i=>i.complete&&i.naturalWidth===720).length===10"),'ten real weapon thumbnail images');
+  await evaluate("document.getElementById('navLoadout').click()");
+  await until(()=>evaluate("[...document.querySelectorAll('#menuLoadoutSlots .weapon-photo')].filter(i=>i.complete&&i.naturalWidth===720).length===2"),'selected loadout thumbnails');
+  console.log('PASS all ten real-model weapon photos and selected loadout images load');
   fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});
   if(process.argv.includes('--build-previews')){
    const previews=await evaluate(fs.readFileSync(path.join(__dirname,'menu-previews.js'),'utf8'));

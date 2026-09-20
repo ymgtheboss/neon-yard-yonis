@@ -8,14 +8,14 @@ const server=spawn(process.execPath,[path.join(__dirname,'..','server.cjs')],{en
 let logs='';server.stdout.on('data',b=>logs+=b);server.stderr.on('data',b=>logs+=b);
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label){for(let i=0;i<400;i++){const v=fn();if(v)return v;await delay(30)}throw Error('Timed out: '+label+'\n'+logs);}
-async function join(name){const ws=new WS(url),c={ws,events:[],states:[],id:null,autoReady:true};sockets.push(ws);ws.on('message',raw=>{const m=JSON.parse(raw);c.events.push(m);if(m.type==='state')c.states.push(m);if(m.type==='welcome'){c.id=m.id;ws.send(JSON.stringify({type:'mapReady',mapId:m.mapId,mapEpoch:m.mapEpoch}));}if(m.type==='mapChanged'&&c.autoReady)ws.send(JSON.stringify({type:'mapReady',mapId:m.mapId,mapEpoch:m.mapEpoch}))});await new Promise((r,j)=>{ws.on('open',r);ws.on('error',j)});ws.send(JSON.stringify({type:'join',name,loadout:['rifle','pistol'],grenades:['flash','smoke']}));await until(()=>c.id,'join');return c;}
+async function join(name){const ws=new WS(url),c={ws,events:[],states:[],id:null,autoReady:true};sockets.push(ws);ws.on('message',raw=>{const m=JSON.parse(raw);c.events.push(m);if(m.type==='state')c.states.push(m);if(m.type==='welcome'){c.id=m.id;ws.send(JSON.stringify({type:'mapReady',mapId:m.mapId,mapEpoch:m.mapEpoch}));}if(m.type==='mapChanged'&&c.autoReady)ws.send(JSON.stringify({type:'mapReady',mapId:m.mapId,mapEpoch:m.mapEpoch}))});await new Promise((r,j)=>{ws.on('open',r);ws.on('error',j)});ws.send(JSON.stringify({type:'join',name,predictedFire:true,loadout:['rifle','pistol'],grenades:['flash','smoke']}));await until(()=>c.id,'join');return c;}
 const send=(c,m)=>c.ws.send(JSON.stringify(m));
 (async()=>{
  await until(()=>logs.includes('This computer:'),'server startup');
  for(const route of ['/','/world.js','/three.module.js','/three.core.js','/district.css']){const r=await fetch(url+route);assert.equal(r.status,200);assert.ok((await r.text()).length>20)}
  console.log('PASS all five locally served asset routes');
  assert.equal((await fetch(url+'/server.cjs')).status,404);console.log('PASS server source is not publicly served');
- for(const route of ['/addons/loaders/GLTFLoader.js','/addons/utils/BufferGeometryUtils.js','/addons/utils/SkeletonUtils.js','/map-collision.js','/combat-visuals.js','/combat.css','/character-config.js','/weapon-models.mjs','/weapon-credits.html'])assert.equal((await fetch(url+route)).status,200);
+ for(const route of ['/addons/loaders/GLTFLoader.js','/addons/utils/BufferGeometryUtils.js','/addons/utils/SkeletonUtils.js','/map-collision.js','/combat-visuals.js','/combat.css','/character-config.js','/practice','/practice.mjs','/practice.css','/weapon-rules.js','/weapon-models.mjs','/weapon-credits.html'])assert.equal((await fetch(url+route)).status,200);
  const weapons=await (await fetch(url+'/weapons/manifest.json')).json();assert.equal(Object.keys(weapons.weapons).length,10);
  for(const route of ['/maps/subzero.glb','/maps/subzero-collision.bin',...Object.keys(weapons.weapons).map(id=>'/weapons/'+id+'.glb')]){
   const r=await fetch(url+route);assert.equal(r.status,200);assert.equal(r.headers.get('content-encoding'),'gzip');const bytes=(await r.arrayBuffer()).byteLength;assert.ok(bytes>1000);assert.equal(Number(r.headers.get('x-file-size')),bytes);
@@ -51,6 +51,21 @@ const send=(c,m)=>c.ws.send(JSON.stringify(m));
  console.log('PASS results remain frozen and map votes validate, replace and count once');
  send(a,{type:'map',mapId:'subzero'});await until(()=>b.states.at(-1)?.mapId==='subzero'&&b.states.at(-1).readyCount===2,'return to original map');send(a,{type:'start'});await until(()=>b.states.at(-1)?.phase==='playing','rematch');assert.equal(b.states.at(-1).mode,'tdm');assert.equal(b.states.at(-1).capture,null);assert.notEqual(b.states.at(-1).players[0].team,b.states.at(-1).players[1].team);assert.deepEqual(b.states.at(-1).teamScores,{blue:0,red:0});assert.equal(a.states.at(-1).self.slot,0);assert.equal(b.states.at(-1).myVote,null);assert.ok(Object.values(b.states.at(-1).mapVotes).every(v=>v===0));assert.ok(Math.abs(b.states.at(-1).players[0].characterScale-1/1.5/1.3)<1e-9);console.log('PASS round timer, results, Subzero-only smaller character size and rematch reset');
  await until(()=>b.states.at(-1).phase==='ended','team deathmatch ends');const finalTeam=JSON.stringify(b.states.at(-1).teamScores);send(a,{type:'mode',mode:'deathmatch'});await until(()=>b.states.at(-1).nextMode==='deathmatch','choose free for all');assert.equal(JSON.stringify(b.states.at(-1).teamScores),finalTeam);send(a,{type:'start'});await until(()=>b.states.at(-1).phase==='playing','free for all starts');assert.equal(b.states.at(-1).mode,'deathmatch');assert.ok(b.states.at(-1).players.every(p=>p.team===null));console.log('PASS Capture Points → Team Deathmatch → Free-for-All transitions and frozen team results');
+ // Exercise the production predicted-shot protocol over a real socket.
+ const own=a.states.at(-1).players.find(p=>p.id===a.id);
+ const request={type:'shot',seq:1,slot:0,spawnSeq:own.spawnSeq,mapEpoch:a.states.at(-1).mapEpoch,yaw:own.yaw,pitch:0,aim:true};
+ send(a,request);await until(()=>a.events.some(m=>m.kind==='shotResult'&&m.shotSeq===1),'predicted shot acknowledged');
+ const accepted=a.events.find(m=>m.kind==='shotResult'&&m.shotSeq===1).accepted;
+ assert.equal(accepted,true);await until(()=>a.states.at(-1).self.shotAck===1,'snapshot includes shot acknowledgement');assert.equal(a.states.at(-1).self.ammo[0],29);
+ send(a,request);send(a,{type:'input',fire:true});await delay(180);
+ assert.equal(a.events.filter(m=>m.kind==='shot'&&m.id===a.id&&m.shotSeq===1).length,1);assert.equal(a.states.at(-1).self.ammo[0],29,'held input cannot duplicate explicit shots');
+ console.log('PASS predicted shots acknowledge once and legacy held fire cannot double-fire');
+ const jumpStates=a.states.length;
+ send(a,{type:'input',seq:50,forward:true,sprint:true,jump:true,jumpSeq:1});
+ send(a,{type:'input',seq:51,forward:true,sprint:true,jump:false,jumpSeq:1});
+ await until(()=>a.states.slice(jumpStates).some(s=>s.self.motion.jumpSeqHandled===1&&s.players.some(p=>p.id===a.id&&!p.ground&&p.vy>0)),'coalesced sprint jump reaches authoritative physics');
+ assert.ok(a.events.some(m=>m.kind==='jump'&&m.id===a.id));
+ console.log('PASS sprint + quick Space release jumps over real WebSocket input');
  a.ws.close();await until(()=>b.states.at(-1)?.host===b.id,'host transfer');assert.equal(b.states.at(-1).players.length,1);console.log('PASS disconnect removes player and transfers host');
  // Fourteen more connections exercise snapshots near room capacity.
  for(let i=0;i<14;i++)await join('Load '+i);

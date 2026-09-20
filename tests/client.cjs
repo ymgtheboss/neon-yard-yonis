@@ -27,7 +27,7 @@ const handlers={};
 const document={body:new Element('body'),head:new Element('head'),createElement:t=>new Element(t),getElementById:id=>els.get(id),addEventListener(name,fn){(handlers[name]||=[]).push(fn);},exitPointerLock(){},pointerLockElement:null};
 class Renderer{constructor(){this.domElement=new Element('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>4};this.info={render:{calls:0}}}setSize(){}setPixelRatio(v){this.pixelRatio=v}render(scene,camera){scene.updateMatrixWorld();camera.updateMatrixWorld()}clearDepth(){}}
 let time=1000;const local=new Map();const intervals=[];
-const context={...require('../combat-visuals.mjs'),URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,WORLD:world,MAP_CATALOG:require('../map-catalog.cjs').catalog,MAP_EPOCH:0,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
+const context={...require('../weapon-rules.cjs'),...require('../combat-visuals.mjs'),URLSearchParams,THREE:{...THREE,WebGLRenderer:Renderer},...world,WORLD:world,MAP_CATALOG:require('../map-catalog.cjs').catalog,MAP_EPOCH:0,document,window:{addEventListener(){}},innerWidth:1280,innerHeight:800,devicePixelRatio:1,location:{origin:'http://localhost',protocol:'http:',host:'localhost'},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},performance:{now:()=>time},requestAnimationFrame(){},setInterval:fn=>intervals.push(fn),setTimeout(){},console,Math,Date,WebSocket:{OPEN:1}};
 context.window.document=document;
 vm.createContext(context);
 const server=fs.readFileSync(path.join(__dirname,'..','server.cjs'),'utf8');
@@ -115,8 +115,8 @@ test('Results use the frozen winner and preserve vote buttons during updates',()
 
 test('Rapid hits accumulate damage only for the same target and reset cleanly',()=>{
  setState();run("clearTransientWorld();onEvent({kind:'hit',amount:12,victim:'A',victimId:'one'});onEvent({kind:'hit',amount:18,victim:'A',victimId:'one'})");
- assert.equal(els.get('hitConfirm').textContent,'30 DMG');
- run("onEvent({kind:'hit',amount:9,victim:'A',victimId:'two'})");assert.equal(els.get('hitConfirm').textContent,'9 DMG');
+ assert.equal(els.get('hitConfirm').textContent,'BODY · 30 DMG');
+ run("onEvent({kind:'hit',amount:9,victim:'A',victimId:'two'})");assert.equal(els.get('hitConfirm').textContent,'BODY · 9 DMG');
  run('clearTransientWorld()');assert.equal(run('hitDamage'),0);
 });
 
@@ -160,4 +160,95 @@ test('Stair camera glides without changing physical height and resets after a te
 test('Team Deathmatch shows team scores without capture zones and names the winning team',()=>{
  setState();run("state.mode='tdm';state.teamScores={blue:7,red:4};me.team='blue';updateCaptureObjectives(performance.now())");assert.ok(els.get('teamScore').textContent.includes('BLUE 7'));assert.equal(run('objectiveVisuals.size'),0);assert.ok(els.get('captureTimer').textContent.includes('TEAM DEATHMATCH'));
  run("state.phase='ended';nextRosterRefresh=0;updateInterface()");assert.ok(els.get('winner').textContent.includes('BLUE TEAM WINS'));run('clearTransientWorld()');
+});
+
+
+test('Local firing is immediate, confirmations do not repeat effects, and ammo reconciles',()=>{
+ setState();run("clearTransientWorld();for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;buildGun('rifle');me.spawnSeq=1;socket={readyState:1,send(raw){globalThis.sentShots.push(JSON.parse(raw));}};globalThis.sentShots=[];globalThis.shotSounds=0;globalThis.realSpatialShot=spatialShot;spatialShot=()=>globalThis.shotSounds++;resetShotPrediction();fire=false;recoil=0;");
+ for(const fn of handlers.mousedown)fn({button:0});
+ assert.equal(run('shotSounds'),1);assert.equal(run('pendingShots.size'),1);assert.equal(run('shellEffects.length'),1);assert.equal(run('muzzleSparks.length'),4);assert.ok(run('recoil>0'));assert.equal(els.get('ammo').textContent,'29 / 30');
+ const kick=run('recoil');const seq=run('shotSeq');
+ time+=180;run(`onEvent({kind:'shot',id:myId,gun:'rifle',shotSeq:${seq},origin:{x:3,y:1,z:20},ends:[]});onEvent({kind:'shotResult',accepted:true,shotSeq:${seq}})`);
+ assert.equal(run('shotSounds'),1);assert.equal(run('shellEffects.length'),1);assert.equal(run('recoil'),kick);assert.equal(run('visibleAmmo()'),29);
+ // Delayed acknowledgement must not restart the weapon's local firing cooldown.
+ run('predictShot(performance.now())');assert.equal(run('sentShots.filter(m=>m.type==="shot").length'),2);assert.equal(run('visibleAmmo()'),28);
+ run(`state.self.ammo[0]=29;state.self.shotAck=${seq};reconcileShots(state.self);updateInterface()`);assert.equal(run('visibleAmmo()'),28);
+ run('onEvent({kind:"shotResult",accepted:false,shotSeq, retryAfter:0})');assert.equal(run('visibleAmmo()'),29);assert.equal(els.get('ammo').textContent,'29 / 30');
+ run('spatialShot=realSpatialShot;fire=false;document.pointerLockElement=null;socket=null;clearTransientWorld()');
+});
+test('Semi-auto, empty magazines, reload, switching and inactive play gate predicted shots',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;socket={readyState:1,send(){}};resetShotPrediction();state.self.slot=1;fire=true;predictShot(performance.now());");
+ assert.equal(run('pendingShots.size'),1);time+=1000;run('predictShot(performance.now())');assert.equal(run('pendingShots.size'),1);
+ run('fire=false;predictShot();fire=true;predictShot()');assert.equal(run('pendingShots.size'),2);
+ run('resetShotPrediction();state.self.ammo[1]=0;predictShot()');assert.equal(run('pendingShots.size'),0);
+ run('state.self.ammo[1]=5;state.self.reloadAt=serverNow()+1000;predictShot()');assert.equal(run('pendingShots.size'),0);
+ run('state.self.reloadAt=0;requestWeaponAction({type:"switch",slot:0});predictShot()');assert.equal(run('pendingShots.size'),0);
+ time+=300;run('state.phase="ended";predictShot()');assert.equal(run('pendingShots.size'),0);
+ run('fire=false;document.pointerLockElement=null;socket=null;clearTransientWorld()');
+});
+test('Movement responds before the next network send and camera follows without trailing',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;settings.motion='no';mapReady=true;globalThis.oldCollision=mapCollision;mapCollision={move(p,dt){p.x+=(p.input.right?6:0)*dt;}};keys.add(settings.bindings.right);cameraReady=false;predicted=null;correction.set(0,0,0)");
+ const start=run('me.x');time+=8;run(`frame(${time})`);assert.ok(run('predicted.x')>start);assert.ok(Math.abs(run('camera.position.x-predicted.x'))<1e-9);
+ const before=run('camera.position.x');
+ run('state.self.inputSeq=inputSeq+1;me.x=predicted.x-.1;reconcileMovement(state)');assert.ok(Math.abs(run('predicted.x+correction.x')-before)<1e-9);
+ time+=8;run(`frame(${time})`);assert.ok(run('camera.position.x')>before,'fresh input continues during correction smoothing');
+ run('keys.clear();mapCollision=oldCollision;document.pointerLockElement=null;clearTransientWorld()');
+});
+
+test('An obstructed local muzzle produces no cosmetic shot and resets clear pending state',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;socket={readyState:1,send(){}};resetShotPrediction();globalThis.savedCollision=mapCollision;mapCollision={distance(){return 0;}};fire=true;predictShot()");
+ assert.equal(run('pendingShots.size'),0);assert.equal(els.get('message').textContent,'MUZZLE BLOCKED');
+ run('pendingShots.set(999,{slot:0});predictedShotIds.add(999);pendingSlot=1;resetShotPrediction()');assert.equal(run('pendingShots.size+predictedShotIds.size'),0);assert.equal(run('pendingSlot'),null);
+ run('fire=false;mapCollision=savedCollision;document.pointerLockElement=null;socket=null;clearTransientWorld()');
+});
+
+test('Weapon recoil kicks on the current frame and reloads lower the gun below its ready pose',()=>{
+ setState();run("settings.motion='no';aim=false;buildGun('rifle');recoil=0;weaponMotion.equip=0;weaponMotion.lastGun='rifle'");for(let i=0;i<60;i++)run('upgradeFrame(1/60,performance.now())');const ready=run('gunRoot.position.y');
+ run('recoil=.1;upgradeFrame(0,performance.now())');assert.ok(run('gunRoot.rotation.x')>.16);
+ run('recoil=0;state.self.reloadAt=serverNow()+WEAPONS.rifle.reload*500');for(let i=0;i<60;i++)run('upgradeFrame(1/60,performance.now())');assert.ok(run('gunRoot.position.y')<ready-.1);
+ run('state.self.reloadAt=0;clearTransientWorld()');
+});
+
+test('Default/reset FOV is 110 and scoreboard leaves sprint, jump and new movement input active',()=>{
+ assert.equal(run('defaults.fov'),110);
+ setState();run("mapReady=true;for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;keys.clear();");
+ const press=code=>{for(const fn of handlers.keydown)fn({code,target:{tagName:'CANVAS'},repeat:false,preventDefault(){}});};
+ press('KeyW');press('ShiftLeft');press('Tab');assert.equal(run('active()'),true);assert.equal(run('sampleInput(1).forward&&sampleInput(1).sprint'),true);assert.ok(!els.get('board').classList.contains('hidden'));
+ press('KeyD');press('Space');for(const fn of handlers.keyup)fn({code:'Space'});
+ assert.equal(run('sampleInput(1).jump&&sampleInput(1,true).jump'),true,'short Space tap survives until prediction and network sampling');assert.equal(run('sampleInput(1).right'),true);
+ for(const fn of handlers.keyup)fn({code:'Tab'});assert.ok(els.get('board').classList.contains('hidden'));assert.equal(run('sampleInput(1).forward&&sampleInput(1).sprint'),true);
+ press('Tab');run('resetInput()');assert.ok(els.get('board').classList.contains('hidden'));assert.equal(run('queuedJump||queuedNetJump||boardHeld'),false);
+ run("show('settings');");assert.equal(run('active()'),false);run("show('settings',false);document.pointerLockElement=null;clearTransientWorld()");
+});
+
+test('FOV migration updates the former default once and preserves custom choices',()=>{
+ const setup=code.slice(code.indexOf('const defaults ='),code.indexOf('let loadout ='));
+ for(const [saved,expected]of [[{},110],[{fov:85},110],[{fov:95},95],[{fov:85,fovDefault110:true},85]]){
+  const c={readSaved:()=>saved,save(){}};vm.createContext(c);vm.runInContext(setup+';globalThis.result=settings.fov',c);assert.equal(c.result,expected);
+ }
+});
+
+test('Jump press IDs survive button release and are shared by local/network samples',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);mapReady=true;document.pointerLockElement=renderer.domElement;keys.clear();");
+ const press=code=>{for(const fn of handlers.keydown)fn({code,target:{tagName:'CANVAS'},repeat:false,preventDefault(){}});};
+ press('KeyW');press('ShiftLeft');const before=run('jumpPressSeq');press('Space');for(const fn of handlers.keyup)fn({code:'Space'});
+ run('queuedJump=false;queuedNetJump=false');assert.equal(run('sampleInput(99).jumpSeq'),before+1);assert.equal(run('sampleInput(99,true).jumpSeq'),before+1);assert.equal(run('sampleInput(99,true).jump'),false);assert.equal(run('sampleInput(99,true).sprint'),true);
+ for(const fn of handlers.keydown)fn({code:'Space',target:{tagName:'CANVAS'},repeat:true,preventDefault(){}});assert.equal(run('jumpPressSeq'),before+1);
+ run('resetInput();document.pointerLockElement=null;clearTransientWorld()');
+});
+
+test('Confirmed target damage numbers accumulate, distinguish lethal hits, and expire cleanly',()=>{
+ setState();run('clearTransientWorld();');
+ run("onEvent({kind:'hit',victimId:'remote',victim:'Remote',amount:26,head:false});onEvent({kind:'hit',victimId:'remote',victim:'Remote',amount:47,head:true,kill:true})");
+ assert.equal(run('damageNumbers.length'),1);assert.equal(run('damageNumbers[0].amount'),73);assert.ok(run('damageNumbers[0].el.textContent.includes("KO")'));
+ run('updateDamageNumbers(performance.now()+1200)');assert.equal(run('damageNumbers.length'),0);
+ run("onEvent({kind:'hurt',amount:28,source:{x:5,z:2}})");assert.equal(els.get('damageTaken').textContent,'−28 HP');run('clearTransientWorld()');assert.equal(run('damageTakenUntil'),0);
+});
+
+test('Hip-fire reticle expands for sniper/shotguns, tracks stance and hides while scoped',()=>{
+ setState();run("for(const id of ['menu','room','settings','board'])show(id,false);document.pointerLockElement=renderer.domElement;settings.fov=110;camera.fov=110;predicted=null;aim=false;state.self.guns[0]='rifle';");time+=16;run(`frame(${time})`);const rifle=parseFloat(els.get('crosshair').style.width);
+ run("state.self.guns[0]='sniper';me.ground=true;me.stance='stand'");time+=16;run(`frame(${time})`);const sniper=parseFloat(els.get('crosshair').style.width);assert.ok(sniper>rifle*2);assert.ok(els.get('crosshair').classList.contains('wide-spread'));
+ run("me.stance='crouch'");time+=16;run(`frame(${time})`);assert.ok(parseFloat(els.get('crosshair').style.width)<sniper);
+ run("me.stance='stand';state.self.guns[0]='shotgun'");time+=16;run(`frame(${time})`);assert.ok(parseFloat(els.get('crosshair').style.width)>rifle*2);
+ run("state.self.guns[0]='sniper';aim=true");time+=16;run(`frame(${time})`);assert.ok(els.get('crosshair').classList.contains('hidden'));assert.ok(!els.get('scope').classList.contains('hidden'));run('aim=false;document.pointerLockElement=null;clearTransientWorld()');
 });

@@ -19,29 +19,39 @@ class MapCollision {
  support(x,z,top,drop=.6,rx=.36*CHARACTER_SCALE,rz=.36*CHARACTER_SCALE){let y=-Infinity;for(const [dx,dz]of [[0,0],[-rx,-rz],[rx,-rz],[-rx,rz],[rx,rz]])y=Math.max(y,this.floor(x+dx,z+dz,top,drop));return y;}
  move(p,dt) {
   dt=Math.min(Math.max(dt,0),.1);
+  // Shared short steps keep collision/jump integration stable at any render rate.
+  if(dt>1/120+1e-8){const steps=Math.ceil(dt/(1/120));for(let n=0;n<steps;n++)this.move(p,dt/steps);return;}
   const i=p.input||{};
   p.motionTime=(p.motionTime||0)+dt;
   p.stance=p.stance||'stand';p.vx=p.vx||0;p.vz=p.vz||0;
   if(p.ground)p.lastGroundAt=p.motionTime;
-  if(i.jump&&!p.jumpHeld)p.jumpUntil=p.motionTime+.14;
+  // A press ID survives coalesced press/release inputs and snapshot replay.
+  // Legacy clients without IDs still use the held-button edge.
+  const sequencedJump=Number.isSafeInteger(i.jumpSeq)&&i.jumpSeq>0;
+  const jumpPressed=sequencedJump?i.jumpSeq>(p.jumpSeqHandled||0):i.jump&&!p.jumpHeld;
+  if(jumpPressed)p.jumpUntil=p.motionTime+.18;
+  if(sequencedJump)p.jumpSeqHandled=Math.max(p.jumpSeqHandled||0,i.jumpSeq);
   p.jumpHeld=!!i.jump;
-  const crouchEdge=(i.crouch||i.slide)&&!p.crouchHeld;
+  const sequencedSlide=Number.isSafeInteger(i.slideSeq)&&i.slideSeq>0;
+  const crouchEdge=sequencedSlide?i.slideSeq>(p.slideSeqHandled||0):(i.crouch||i.slide)&&!p.crouchHeld;
+  if(sequencedSlide)p.slideSeqHandled=Math.max(p.slideSeqHandled||0,i.slideSeq);
   p.crouchHeld=!!(i.crouch||i.slide);
   let requested=i.prone?'prone':i.crouch?'crouch':'stand';
-  if(crouchEdge&&p.ground&&i.sprint&&Math.hypot(p.vx,p.vz)>5.5&&p.motionTime>=(p.slideReadyAt||0)&&!i.prone){
-   p.slideUntil=p.motionTime+.8;p.slideReadyAt=p.motionTime+1.65;
+  // A deliberate slide tap shortly before landing is buffered, not lost in the air.
+  if(crouchEdge)p.slideQueuedUntil=p.motionTime+.18;
+  if(!i.sprint||i.prone)p.slideQueuedUntil=-1;
+  if(p.slideQueuedUntil>=p.motionTime&&p.ground&&i.sprint&&Math.hypot(p.vx,p.vz)>5.5&&p.motionTime>=(p.slideReadyAt||0)&&p.motionTime>=(p.slideUntil||0)&&!i.prone){
+   p.slideQueuedUntil=-1;p.slideUntil=p.motionTime+.8;p.slideReadyAt=p.motionTime+.6;
    const v=Math.hypot(p.vx,p.vz);p.vx=p.vx/v*11;p.vz=p.vz/v*11;
   }
   if(p.motionTime<(p.slideUntil||0))requested='slide';
-  const desired=bodyShape({...p,stance:requested});
-  // Always check the complete new volume, including the longer prone body.
-  if(!this.blocked(p.x,p.y,p.z,desired.rx,desired.height,desired.rz))p.stance=requested;
+  // Only stance transitions need a new-volume test, including the longer prone body.
+  if(requested!==p.stance){const desired=bodyShape({...p,stance:requested});if(!this.blocked(p.x,p.y,p.z,desired.rx,desired.height,desired.rz))p.stance=requested;}
   if((p.jumpUntil||0)>=p.motionTime&&(p.ground||p.motionTime-(p.lastGroundAt??-100)<.1)&&p.stance!=='prone'){
    const fromSlide=p.stance==='slide';
    p.vy=7.1;p.ground=false;p.jumpUntil=-1;p.lastGroundAt=-100;p.slideUntil=0;
    if(fromSlide){
-    // Carry most of the slide's momentum once; never add another speed boost.
-    p.vx*=.92;p.vz*=.92;
+    // Keep slide momentum through takeoff; steering never adds a second boost.
     const exitStance=i.crouch?'crouch':'stand',exit=bodyShape({...p,stance:exitStance});
     if(!this.blocked(p.x,p.y,p.z,exit.rx,exit.height,exit.rz))p.stance=exitStance;
    }
@@ -49,7 +59,7 @@ class MapCollision {
   const shape=bodyShape(p),blocked=(x,y,z)=>this.blocked(x,y,z,shape.rx,shape.height,shape.rz);
   const support=(x,z,top,drop)=>this.support(x,z,top,drop,shape.rx,shape.rz);
   const f=Number(!!i.forward)-Number(!!i.back),s=Number(!!i.right)-Number(!!i.left),length=Math.hypot(f,s)||1;
-  const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&f>0&&!i.fire?9:6;
+  const speed=p.stance==='prone'?1.6:p.stance==='crouch'?3:p.stance==='slide'?(p.motionTime<(p.slideUntil||0)?10:3):i.aim?3.5:i.sprint&&f>0?(i.fire?8.4:9):6;
   const tx=(-Math.sin(p.yaw)*f+Math.cos(p.yaw)*s)/length*speed;
   const tz=(-Math.cos(p.yaw)*f-Math.sin(p.yaw)*s)/length*speed;
   const steps=Math.max(1,Math.ceil(dt/.008)),sub=dt/steps;
@@ -57,24 +67,36 @@ class MapCollision {
    if(p.stance==='slide'&&p.motionTime<(p.slideUntil||0)){
     // Turn gently without generating speed; airborne slides retain momentum.
     const velocity=Math.hypot(p.vx,p.vz);
-    if((f||s)&&velocity>.1){const turn=1-Math.exp(-2.2*sub),dx=p.vx+(tx/speed*velocity-p.vx)*turn,dz=p.vz+(tz/speed*velocity-p.vz)*turn,len=Math.hypot(dx,dz);if(len>.001){p.vx=dx/len*velocity;p.vz=dz/len*velocity;}}
-    const friction=Math.exp(-(p.ground?1.25:.12)*sub);p.vx*=friction;p.vz*=friction;
+    if((f||s)&&velocity>.1){const turn=1-Math.exp(-3*sub),dx=p.vx+(tx/speed*velocity-p.vx)*turn,dz=p.vz+(tz/speed*velocity-p.vz)*turn,len=Math.hypot(dx,dz);if(len>.001){p.vx=dx/len*velocity;p.vz=dz/len*velocity;}}
+    const friction=Math.exp(-(p.ground?.8:.12)*sub);p.vx*=friction;p.vz*=friction;
    } else {
     if(p.ground){
      const reversing=p.vx*tx+p.vz*tz<0;
-     const blend=1-Math.exp(-(f||s?(reversing?30:20):28)*sub);
-     p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
+     const velocity=Math.hypot(p.vx,p.vz);
+     // Landing preserves forward momentum briefly, while stops/reversals stay crisp.
+     const carrying=(f||s)&&!reversing&&!i.aim&&p.stance==='stand'&&velocity>speed+.05;
+     if(carrying){
+      const heading=Math.atan2(p.vz,p.vx),wish=Math.atan2(tz,tx),angle=Math.atan2(Math.sin(wish-heading),Math.cos(wish-heading));
+      const direction=heading+Math.max(-5.2*sub,Math.min(5.2*sub,angle));
+      const friction=p.motionTime-(p.landedAt??-100)<.12?.4:4;
+      const carrySpeed=speed+(velocity-speed)*Math.exp(-friction*sub);
+      p.vx=Math.cos(direction)*carrySpeed;p.vz=Math.sin(direction)*carrySpeed;
+     }else{
+      const blend=1-Math.exp(-(f||s?(reversing?30:20):28)*sub);
+      p.vx+=(tx-p.vx)*blend;p.vz+=(tz-p.vz)*blend;
+     }
     }else if(f||s){
      // Turn the velocity vector instead of blending opposing vectors to a stop.
      // Steering has an angular limit and cannot multiply carried slide speed.
      const velocity=Math.hypot(p.vx,p.vz),heading=Math.atan2(p.vz,p.vx),wish=Math.atan2(tz,tx);
      const angle=Math.atan2(Math.sin(wish-heading),Math.cos(wish-heading));
-     const turn=Math.max(-2.8*sub,Math.min(2.8*sub,angle));
-     const nextSpeed=velocity<speed?Math.min(speed,velocity+4*sub):velocity*Math.exp(-.08*sub);
+     const turn=Math.max(-4.6*sub,Math.min(4.6*sub,angle));
+     const nextSpeed=velocity<speed?Math.min(speed,velocity+5.5*sub):velocity*Math.exp(-.08*sub);
      const direction=velocity<.05?wish:heading+turn;
      p.vx=Math.cos(direction)*nextSpeed;p.vz=Math.sin(direction)*nextSpeed;
     }else{p.vx*=Math.exp(-.12*sub);p.vz*=Math.exp(-.12*sub);}
    }
+   const horizontalSpeed=Math.hypot(p.vx,p.vz);if(horizontalSpeed>11){p.vx*=11/horizontalSpeed;p.vz*=11/horizontalSpeed;}
    for(const axis of ['x','z']){
     const velocity=axis==='x'?'vx':'vz',next=p[axis]+p[velocity]*sub;
     const x=axis==='x'?next:p.x,z=axis==='z'?next:p.z;
@@ -83,7 +105,11 @@ class MapCollision {
      const top=support(x,z,p.y+.29,.58);
      if(top>p.y+.001&&top<=p.y+.285&&!blocked(x,top,z)&&!blocked(p.x,top,p.z)){p.y=top;p[axis]=next;continue;}
     }
-    p[velocity]=0;
+    // Move right up to the contact instead of discarding the entire axis step.
+    // The other axis can still slide along the wall or door frame.
+    let safe=p[axis],bad=next;
+    for(let k=0;k<3&&Math.abs(safe-bad)>.004;k++){const mid=(safe+bad)/2;if(blocked(axis==='x'?mid:p.x,p.y,axis==='z'?mid:p.z))bad=mid;else safe=mid;}
+    p[axis]=safe;p[velocity]=0;
    }
    const old=p.y,wasGround=p.ground;
    p.vy-=(p.vy>0?19.5:24)*sub;
@@ -97,7 +123,7 @@ class MapCollision {
     for(let k=0;k<10;k++){const mid=(safe+bad)/2;if(blocked(p.x,mid,p.z))bad=mid;else safe=mid;}
     next=safe;if(p.vy<0)p.ground=true;p.vy=0;
    }
-   p.y=next;
+   p.y=next;if(!wasGround&&p.ground)p.landedAt=p.motionTime;
   }
  }
 }
